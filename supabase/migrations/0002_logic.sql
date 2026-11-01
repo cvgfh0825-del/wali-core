@@ -1,0 +1,1024 @@
+-- =====================================================================
+--  WALI CORE — 0002: الصلاحيات والعمليات والإشعارات
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- أدوات مساعدة
+-- ---------------------------------------------------------------------
+create or replace function public.fmt(n numeric) returns text
+language sql immutable as $$ select to_char(round(coalesce(n,0)), 'FM999G999G999G990') $$;
+
+-- نسبة من غير أصفار زيادة: 0.500 ← 0.5
+create or replace function public.pct(t text) returns text
+language sql immutable as $$ select coalesce(t::numeric::float8::text, '0') $$;
+
+create or replace function public.is_admin() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from profiles where id = auth.uid() and is_active and role = 'admin')
+$$;
+
+-- الصلاحيات: permissions = {"sales": ["view","create",...], ...}
+-- الأفعال: view, create, edit, approve, print, cancel
+create or replace function public.has_perm(p_module text, p_action text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from profiles
+    where id = auth.uid() and is_active
+      and (role = 'admin' or coalesce(permissions -> p_module, '[]'::jsonb) ? p_action)
+  )
+$$;
+
+create or replace function public.ensure_perm(p_module text, p_action text) returns void
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.has_perm(p_module, p_action) then
+    raise exception 'ليس لديك صلاحية لهذه العملية (% / %)', p_module, p_action using errcode = '42501';
+  end if;
+end $$;
+
+create or replace function public.is_active_user() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from profiles where id = auth.uid() and is_active)
+$$;
+
+create or replace function public.actor_name() returns text
+language sql stable security definer set search_path = public as $$
+  select coalesce(nullif(full_name, ''), username) from profiles where id = auth.uid()
+$$;
+
+create or replace function public.month_start(p_period text) returns date
+language sql immutable as $$ select (p_period || '-01')::date $$;
+
+-- ---------------------------------------------------------------------
+-- سعر الصرف
+-- ---------------------------------------------------------------------
+create or replace function public.current_rate() returns numeric
+language sql stable security definer set search_path = public as $$
+  select rate from exchange_rates where rate_date = public.local_today()
+  order by created_at desc limit 1
+$$;
+
+create or replace function public.latest_rate() returns numeric
+language sql stable security definer set search_path = public as $$
+  select rate from exchange_rates order by rate_date desc, created_at desc limit 1
+$$;
+
+create or replace function public.set_exchange_rate(p_rate numeric, p_note text default null)
+returns public.exchange_rates
+language plpgsql security definer set search_path = public as $$
+declare r exchange_rates;
+begin
+  perform ensure_perm('rates', 'create');
+  if p_rate is null or p_rate <= 0 then raise exception 'سعر الدولار لازم يكون رقم أكبر من صفر'; end if;
+  insert into exchange_rates (rate, rate_date, note, created_by)
+  values (p_rate, local_today(), p_note, auth.uid()) returning * into r;
+  return r;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- الترقيم
+-- ---------------------------------------------------------------------
+create or replace function public.next_doc_number(p_kind text) returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  y int := extract(year from local_today())::int;
+  n int;
+  prefix text;
+begin
+  insert into doc_counters (kind, year, last) values (p_kind, y, 1)
+  on conflict (kind, year) do update set last = doc_counters.last + 1
+  returning last into n;
+  prefix := case p_kind
+    when 'proforma' then 'PF' when 'final' then 'INV'
+    when 'purchase' then 'PO' when 'delivery' then 'DL' else upper(p_kind) end;
+  return prefix || '-' || lpad((y % 100)::text, 2, '0') || '-' || lpad(n::text, 5, '0');
+end $$;
+
+-- ---------------------------------------------------------------------
+-- المستخدمين: أول مستخدم يتسجل بيبقى Admin
+-- ---------------------------------------------------------------------
+create or replace function public.handle_new_user() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare v_role text := coalesce(new.raw_user_meta_data ->> 'role', 'custom');
+begin
+  if not exists (select 1 from profiles where role = 'admin') then v_role := 'admin'; end if;
+  insert into profiles (id, username, full_name, role, permissions)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data ->> 'username', split_part(new.email, '@', 1)),
+    coalesce(new.raw_user_meta_data ->> 'full_name', ''),
+    v_role,
+    coalesce(new.raw_user_meta_data -> 'permissions', '{}'::jsonb)
+  ) on conflict (id) do nothing;
+  return new;
+end $$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+-- المستخدم العادي ميقدرش يغيّر دوره أو صلاحياته بنفسه
+create or replace function public.guard_profile() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.has_perm('users', 'edit') then
+    new.role := old.role;
+    new.permissions := old.permissions;
+    new.is_active := old.is_active;
+    new.username := old.username;
+  end if;
+  -- آخر Admin ميتشالش
+  if old.role = 'admin' and (new.role <> 'admin' or not new.is_active)
+     and (select count(*) from profiles where role = 'admin' and is_active and id <> old.id) = 0 then
+    raise exception 'لازم يفضل Admin واحد على الأقل';
+  end if;
+  return new;
+end $$;
+drop trigger if exists guard_profile on public.profiles;
+create trigger guard_profile before update on public.profiles
+  for each row execute function public.guard_profile();
+
+-- ---------------------------------------------------------------------
+-- الأصناف والمخزن
+-- ---------------------------------------------------------------------
+create or replace function public.products_before() returns trigger
+language plpgsql as $$
+begin
+  if tg_op = 'INSERT' then
+    new.qty_on_hand := 0;                         -- الرصيد الافتتاحي بيدخل كحركة مخزن
+  elsif new.qty_on_hand is distinct from old.qty_on_hand
+        and coalesce(current_setting('wali.stock_move', true), '') <> '1' then
+    new.qty_on_hand := old.qty_on_hand;           -- الكمية بتتغير من حركات المخزن بس
+  end if;
+  if new.auto_price then
+    new.price_usd := round(new.cost_usd * (1 + new.margin_pct / 100.0), 2);
+  end if;
+  new.updated_at := now();
+  return new;
+end $$;
+drop trigger if exists products_before on public.products;
+create trigger products_before before insert or update on public.products
+  for each row execute function public.products_before();
+
+create or replace function public.apply_stock_movement() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  perform set_config('wali.stock_move', '1', true);
+  update products set qty_on_hand = qty_on_hand + new.qty where id = new.product_id;
+  perform set_config('wali.stock_move', '', true);
+  return new;
+end $$;
+drop trigger if exists apply_stock_movement on public.stock_movements;
+create trigger apply_stock_movement after insert on public.stock_movements
+  for each row execute function public.apply_stock_movement();
+
+create or replace function public.adjust_stock(p_product uuid, p_new_qty numeric, p_note text default null, p_opening boolean default false)
+returns numeric
+language plpgsql security definer set search_path = public as $$
+declare v_cur numeric; v_diff numeric; v_cost numeric;
+begin
+  perform ensure_perm('stock', 'edit');
+  if p_new_qty is null or p_new_qty < 0 then raise exception 'الكمية لازم تكون صفر أو أكتر'; end if;
+  select qty_on_hand, cost_usd into v_cur, v_cost from products where id = p_product for update;
+  if not found then raise exception 'الصنف مش موجود'; end if;
+  v_diff := p_new_qty - v_cur;
+  if v_diff = 0 then return v_cur; end if;
+  insert into stock_movements (product_id, kind, qty, unit_cost_usd, note, created_by)
+  values (p_product,
+          case when p_opening then 'opening' when v_diff > 0 then 'adjust_in' else 'adjust_out' end,
+          v_diff, v_cost, coalesce(p_note, 'تسوية جرد'), auth.uid());
+  return p_new_qty;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- الفواتير
+-- ---------------------------------------------------------------------
+-- p = {id?, kind, customer_id?, customer_name?, customer_phone?, discount_sdg, paid_sdg,
+--      method?, notes?, items:[{product_id, qty, unit_price_usd?, unit_price_sdg?}]}
+create or replace function public._write_invoice(p jsonb, p_allow_price boolean, p_source uuid default null)
+returns public.invoices
+language plpgsql security definer set search_path = public as $$
+declare
+  v_kind     text := coalesce(p ->> 'kind', 'proforma');
+  v_id       uuid := nullif(p ->> 'id', '')::uuid;
+  v_rate     numeric := current_rate();
+  v_items    jsonb := p -> 'items';
+  v_disc     numeric := coalesce(nullif(p ->> 'discount_sdg', '')::numeric, 0);
+  v_paid     numeric := coalesce(nullif(p ->> 'paid_sdg', '')::numeric, 0);
+  v_cust     uuid := nullif(p ->> 'customer_id', '')::uuid;
+  v_cname    text := nullif(trim(p ->> 'customer_name'), '');
+  v_cphone   text := nullif(trim(p ->> 'customer_phone'), '');
+  v_sub      numeric := 0;
+  v_cost     numeric := 0;
+  v_total    numeric;
+  v_inv      invoices;
+  it         jsonb;
+  pr         products;
+  r          record;
+  v_usd      numeric;
+  v_sdg      numeric;
+  v_qty      numeric;
+  i          int := 0;
+  v_ptype    text;
+begin
+  if v_rate is null then
+    raise exception 'لازم تكتب سعر الدولار بتاع النهارده الأول';
+  end if;
+  if v_items is null or jsonb_typeof(v_items) <> 'array' or jsonb_array_length(v_items) = 0 then
+    raise exception 'الفاتورة فاضية، ضيف أصناف الأول';
+  end if;
+
+  -- اقفل الأصناف عشان محدش يبيع نفس القطعة في نفس اللحظة
+  perform 1 from products
+   where id in (select (e ->> 'product_id')::uuid from jsonb_array_elements(v_items) e)
+   for update;
+
+  if v_kind = 'final' then
+    for r in
+      select p.id, p.name, p.qty_on_hand, sum((e ->> 'qty')::numeric) as need
+        from jsonb_array_elements(v_items) e
+        join products p on p.id = (e ->> 'product_id')::uuid
+       group by p.id, p.name, p.qty_on_hand
+    loop
+      if r.need > r.qty_on_hand then
+        raise exception 'الكمية المتاحة من "%" هي % بس', r.name, r.qty_on_hand::numeric(14,0);
+      end if;
+    end loop;
+  end if;
+
+  -- احسب الإجماليات
+  for it in select * from jsonb_array_elements(v_items) loop
+    select * into pr from products where id = (it ->> 'product_id')::uuid;
+    if not found then raise exception 'صنف غير موجود في المخزن'; end if;
+    v_qty := nullif(it ->> 'qty', '')::numeric;
+    if v_qty is null or v_qty <= 0 then raise exception 'كمية غير صحيحة للصنف "%"', pr.name; end if;
+    v_usd := case when p_allow_price and nullif(it ->> 'unit_price_usd', '') is not null
+                  then (it ->> 'unit_price_usd')::numeric else pr.price_usd end;
+    v_sdg := case when p_allow_price and nullif(it ->> 'unit_price_sdg', '') is not null
+                  then (it ->> 'unit_price_sdg')::numeric else round(v_usd * v_rate, 2) end;
+    v_sub := v_sub + round(v_sdg * v_qty, 2);
+    v_cost := v_cost + round(pr.cost_usd * v_rate * v_qty, 2);
+  end loop;
+
+  v_total := v_sub - v_disc;
+  if v_disc < 0 or v_total < 0 then raise exception 'الخصم أكبر من قيمة الفاتورة'; end if;
+
+  if v_kind = 'final' then
+    if v_paid > v_total then v_paid := v_total; end if;
+    v_ptype := case when v_paid >= v_total then 'cash' when v_paid = 0 then 'credit' else 'partial' end;
+  else
+    v_paid := 0; v_ptype := coalesce(p ->> 'payment_type', 'cash');
+  end if;
+
+  -- عميل جديد يتسجل لوحده لو كتبت اسمه
+  if v_cust is null and v_cname is not null then
+    select id into v_cust from customers
+     where name = v_cname and coalesce(phone, '') = coalesce(v_cphone, '') limit 1;
+    if v_cust is null then
+      insert into customers (name, phone, created_by) values (v_cname, v_cphone, auth.uid())
+      returning id into v_cust;
+    end if;
+  end if;
+  if v_cust is not null and v_cname is null then
+    select name, phone into v_cname, v_cphone from customers where id = v_cust;
+  end if;
+  if v_kind = 'final' and v_ptype <> 'cash' and v_cust is null then
+    raise exception 'البيع الآجل محتاج اسم العميل';
+  end if;
+
+  if v_id is not null then
+    -- تعديل فاتورة مبدئية مفتوحة
+    select * into v_inv from invoices where id = v_id for update;
+    if not found or v_inv.kind <> 'proforma' or v_inv.status <> 'open' then
+      raise exception 'الفاتورة دي مينفعش تتعدل';
+    end if;
+    delete from invoice_items where invoice_id = v_id;
+    update invoices set customer_id = v_cust, customer_name = v_cname, customer_phone = v_cphone,
+           rate = v_rate, subtotal_sdg = v_sub, discount_sdg = v_disc, total_sdg = v_total,
+           cost_sdg = v_cost, payment_type = v_ptype, notes = p ->> 'notes', invoice_date = local_today()
+     where id = v_id returning * into v_inv;
+  else
+    insert into invoices (number, kind, status, customer_id, customer_name, customer_phone, rate,
+                          subtotal_sdg, discount_sdg, total_sdg, cost_sdg, payment_type, notes,
+                          source_proforma_id, salesperson_id, created_by, posted_at)
+    values (next_doc_number(v_kind), v_kind, case when v_kind = 'final' then 'posted' else 'open' end,
+            v_cust, v_cname, v_cphone, v_rate, v_sub, v_disc, v_total, v_cost, v_ptype, p ->> 'notes',
+            p_source,
+            coalesce((select salesperson_id from invoices where id = p_source), auth.uid()),
+            auth.uid(), case when v_kind = 'final' then now() end)
+    returning * into v_inv;
+  end if;
+
+  for it in select * from jsonb_array_elements(v_items) loop
+    i := i + 1;
+    select * into pr from products where id = (it ->> 'product_id')::uuid;
+    v_qty := (it ->> 'qty')::numeric;
+    v_usd := case when p_allow_price and nullif(it ->> 'unit_price_usd', '') is not null
+                  then (it ->> 'unit_price_usd')::numeric else pr.price_usd end;
+    v_sdg := case when p_allow_price and nullif(it ->> 'unit_price_sdg', '') is not null
+                  then (it ->> 'unit_price_sdg')::numeric else round(v_usd * v_rate, 2) end;
+    insert into invoice_items (invoice_id, product_id, code, name, model, qty, unit_price_usd,
+                               unit_price_sdg, total_sdg, unit_cost_usd, sort)
+    values (v_inv.id, pr.id, pr.code, pr.name, pr.model, v_qty, v_usd, v_sdg,
+            round(v_sdg * v_qty, 2), pr.cost_usd, i);
+    if v_kind = 'final' then
+      insert into stock_movements (product_id, kind, qty, unit_cost_usd, ref_type, ref_id, created_by)
+      values (pr.id, 'sale_out', -v_qty, pr.cost_usd, 'invoice', v_inv.id, auth.uid());
+    end if;
+  end loop;
+
+  if v_kind = 'final' and v_paid > 0 then
+    insert into payments (direction, party_type, customer_id, invoice_id, amount_sdg, method, notes, created_by)
+    values ('in', 'customer', v_cust, v_inv.id, v_paid, coalesce(p ->> 'method', 'cash'),
+            'دفعة من فاتورة ' || v_inv.number, auth.uid());
+  end if;
+
+  select * into v_inv from invoices where id = v_inv.id;
+  return v_inv;
+end $$;
+
+create or replace function public.save_invoice(p jsonb) returns public.invoices
+language plpgsql security definer set search_path = public as $$
+begin
+  if nullif(p ->> 'id', '') is not null then
+    perform ensure_perm('sales', 'edit');
+  else
+    perform ensure_perm('sales', 'create');
+  end if;
+  return _write_invoice(p, has_perm('sales', 'approve'));
+end $$;
+
+-- تحويل المبدئية لنهائية: السعر بالدولار ثابت، والجنيه بريت النهارده
+-- (أو بنفس أسعار المبدئية لو p_keep_sdg = true وعندك صلاحية الاعتماد)
+create or replace function public.convert_proforma(p_id uuid, p_paid numeric default 0,
+                                                   p_method text default 'cash', p_keep_sdg boolean default false)
+returns public.invoices
+language plpgsql security definer set search_path = public as $$
+declare v_pf invoices; v_items jsonb; v_final invoices;
+begin
+  perform ensure_perm('sales', 'create');
+  select * into v_pf from invoices where id = p_id for update;
+  if not found or v_pf.kind <> 'proforma' then raise exception 'الفاتورة المبدئية مش موجودة'; end if;
+  if v_pf.status <> 'open' then raise exception 'الفاتورة دي اتحولت أو اتلغت قبل كده'; end if;
+  if p_keep_sdg and not has_perm('sales', 'approve') then
+    raise exception 'تثبيت أسعار المبدئية محتاج صلاحية اعتماد';
+  end if;
+
+  select jsonb_agg(jsonb_build_object(
+           'product_id', product_id, 'qty', qty, 'unit_price_usd', unit_price_usd,
+           'unit_price_sdg', case when p_keep_sdg then unit_price_sdg end) order by sort)
+    into v_items from invoice_items where invoice_id = p_id;
+
+  v_final := _write_invoice(jsonb_build_object(
+      'kind', 'final', 'customer_id', v_pf.customer_id, 'customer_name', v_pf.customer_name,
+      'customer_phone', v_pf.customer_phone, 'discount_sdg', v_pf.discount_sdg,
+      'paid_sdg', coalesce(p_paid, 0), 'method', p_method, 'notes', v_pf.notes, 'items', v_items),
+    true, p_id);
+
+  update invoices set status = 'converted', converted_invoice_id = v_final.id where id = p_id;
+  return v_final;
+end $$;
+
+create or replace function public.cancel_invoice(p_id uuid, p_reason text) returns public.invoices
+language plpgsql security definer set search_path = public as $$
+declare v_inv invoices; it record;
+begin
+  perform ensure_perm('sales', 'cancel');
+  if coalesce(trim(p_reason), '') = '' then raise exception 'اكتب سبب الإلغاء'; end if;
+  select * into v_inv from invoices where id = p_id for update;
+  if not found then raise exception 'الفاتورة مش موجودة'; end if;
+  if v_inv.status in ('cancelled', 'converted') then raise exception 'الفاتورة دي مينفعش تتلغي'; end if;
+
+  if v_inv.kind = 'final' then
+    for it in select * from invoice_items where invoice_id = p_id loop
+      insert into stock_movements (product_id, kind, qty, unit_cost_usd, ref_type, ref_id, note, created_by)
+      values (it.product_id, 'cancel_in', it.qty, it.unit_cost_usd, 'invoice', p_id, 'إلغاء ' || v_inv.number, auth.uid());
+    end loop;
+    update delivery_permits set status = 'cancelled' where invoice_id = p_id and status = 'pending';
+    if v_inv.paid_sdg > 0 then
+      insert into payments (direction, party_type, customer_id, invoice_id, amount_sdg, notes, created_by)
+      values ('out', 'customer', v_inv.customer_id, p_id, v_inv.paid_sdg, 'رد مبلغ إلغاء ' || v_inv.number, auth.uid());
+    end if;
+  end if;
+
+  update invoices set status = 'cancelled', cancel_reason = p_reason, cancelled_at = now()
+   where id = p_id returning * into v_inv;
+  return v_inv;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- المشتريات: توزيع الشحن والجمارك والرسوم على الأصناف حسب القيمة
+-- p = {supplier_id, purchase_date?, rate?, shipping_sdg, customs_sdg, other_sdg, paid_sdg, notes,
+--      items:[{product_id, qty, unit_price_usd}]}
+-- ---------------------------------------------------------------------
+create or replace function public.save_purchase(p jsonb) returns public.purchases
+language plpgsql security definer set search_path = public as $$
+declare
+  v_rate   numeric := coalesce(nullif(p ->> 'rate', '')::numeric, current_rate());
+  v_ship   numeric := coalesce(nullif(p ->> 'shipping_sdg', '')::numeric, 0);
+  v_cust   numeric := coalesce(nullif(p ->> 'customs_sdg', '')::numeric, 0);
+  v_other  numeric := coalesce(nullif(p ->> 'other_sdg', '')::numeric, 0);
+  v_paid   numeric := coalesce(nullif(p ->> 'paid_sdg', '')::numeric, 0);
+  v_goods  numeric := 0;
+  v_factor numeric;
+  v_pur    purchases;
+  it       jsonb;
+  pr       products;
+  v_qty    numeric;
+  v_price  numeric;
+  v_landed numeric;
+  v_oldq   numeric;
+begin
+  perform ensure_perm('purchases', 'create');
+  if v_rate is null or v_rate <= 0 then raise exception 'لازم تكتب سعر الدولار الأول'; end if;
+  if p -> 'items' is null or jsonb_array_length(p -> 'items') = 0 then raise exception 'الفاتورة فاضية'; end if;
+
+  for it in select * from jsonb_array_elements(p -> 'items') loop
+    v_qty := nullif(it ->> 'qty', '')::numeric;
+    v_price := nullif(it ->> 'unit_price_usd', '')::numeric;
+    if v_qty is null or v_qty <= 0 or v_price is null or v_price < 0 then
+      raise exception 'راجع الكميات والأسعار';
+    end if;
+    v_goods := v_goods + v_qty * v_price;
+  end loop;
+
+  -- نسبة المصاريف الإضافية لقيمة البضاعة
+  v_factor := case when v_goods > 0 then ((v_ship + v_cust + v_other) / v_rate) / v_goods else 0 end;
+
+  insert into purchases (number, supplier_id, purchase_date, rate, goods_usd, shipping_sdg, customs_sdg,
+                         other_sdg, total_sdg, notes, created_by)
+  values (next_doc_number('purchase'), nullif(p ->> 'supplier_id', '')::uuid,
+          coalesce(nullif(p ->> 'purchase_date', '')::date, local_today()), v_rate, v_goods,
+          v_ship, v_cust, v_other, round(v_goods * v_rate + v_ship + v_cust + v_other, 2),
+          p ->> 'notes', auth.uid())
+  returning * into v_pur;
+
+  for it in select * from jsonb_array_elements(p -> 'items') loop
+    select * into pr from products where id = (it ->> 'product_id')::uuid for update;
+    if not found then raise exception 'صنف غير موجود'; end if;
+    v_qty := (it ->> 'qty')::numeric;
+    v_price := (it ->> 'unit_price_usd')::numeric;
+    v_landed := round(v_price * (1 + v_factor), 4);
+    insert into purchase_items (purchase_id, product_id, qty, unit_price_usd, landed_usd)
+    values (v_pur.id, pr.id, v_qty, v_price, v_landed);
+
+    -- متوسط التكلفة المرجّح
+    v_oldq := greatest(pr.qty_on_hand, 0);
+    update products
+       set cost_usd = round((v_oldq * cost_usd + v_qty * v_landed) / nullif(v_oldq + v_qty, 0), 4)
+     where id = pr.id;
+
+    insert into stock_movements (product_id, kind, qty, unit_cost_usd, ref_type, ref_id, created_by)
+    values (pr.id, 'purchase_in', v_qty, v_landed, 'purchase', v_pur.id, auth.uid());
+  end loop;
+
+  if v_paid > 0 then
+    insert into payments (direction, party_type, supplier_id, purchase_id, amount_sdg, method, notes, created_by)
+    values ('out', 'supplier', v_pur.supplier_id, v_pur.id, least(v_paid, v_pur.total_sdg),
+            coalesce(p ->> 'method', 'cash'), 'دفعة من مشتريات ' || v_pur.number, auth.uid());
+  end if;
+
+  select * into v_pur from purchases where id = v_pur.id;
+  return v_pur;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- المدفوعات (بتحدّث المدفوع في الفاتورة لوحدها)
+-- ---------------------------------------------------------------------
+create or replace function public.sync_paid() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare v_inv uuid; v_pur uuid; v_paid numeric; v_total numeric;
+begin
+  v_inv := coalesce(new.invoice_id, old.invoice_id);
+  v_pur := coalesce(new.purchase_id, old.purchase_id);
+  if v_inv is not null then
+    select coalesce(sum(case when direction = 'in' then amount_sdg else -amount_sdg end), 0)
+      into v_paid from payments where invoice_id = v_inv;
+    select total_sdg into v_total from invoices where id = v_inv;
+    update invoices set paid_sdg = v_paid,
+           payment_type = case when kind = 'proforma' or status = 'cancelled' then payment_type
+                                when v_paid >= v_total then 'cash' when v_paid <= 0 then 'credit' else 'partial' end
+     where id = v_inv;
+  end if;
+  if v_pur is not null then
+    select coalesce(sum(case when direction = 'out' then amount_sdg else -amount_sdg end), 0)
+      into v_paid from payments where purchase_id = v_pur;
+    update purchases set paid_sdg = v_paid where id = v_pur;
+  end if;
+  return null;
+end $$;
+drop trigger if exists sync_paid on public.payments;
+create trigger sync_paid after insert or update or delete on public.payments
+  for each row execute function public.sync_paid();
+
+create or replace function public.record_payment(p jsonb) returns public.payments
+language plpgsql security definer set search_path = public as $$
+declare v payments; v_amt numeric := nullif(p ->> 'amount_sdg', '')::numeric;
+        v_inv invoices; v_pur purchases;
+begin
+  perform ensure_perm('accounting', 'create');
+  if v_amt is null or v_amt <= 0 then raise exception 'المبلغ لازم يكون أكبر من صفر'; end if;
+  if nullif(p ->> 'invoice_id', '') is not null then
+    select * into v_inv from invoices where id = (p ->> 'invoice_id')::uuid;
+    if v_inv.status <> 'posted' then raise exception 'الفاتورة مش نهائية'; end if;
+    if v_amt > v_inv.total_sdg - v_inv.paid_sdg + 0.01 then
+      raise exception 'المبلغ أكبر من المتبقي على الفاتورة (%)', fmt(v_inv.total_sdg - v_inv.paid_sdg);
+    end if;
+  end if;
+  if nullif(p ->> 'purchase_id', '') is not null then
+    select * into v_pur from purchases where id = (p ->> 'purchase_id')::uuid;
+    if v_amt > v_pur.total_sdg - v_pur.paid_sdg + 0.01 then
+      raise exception 'المبلغ أكبر من المتبقي للمورد (%)', fmt(v_pur.total_sdg - v_pur.paid_sdg);
+    end if;
+  end if;
+  insert into payments (direction, party_type, customer_id, supplier_id, invoice_id, purchase_id,
+                        amount_sdg, method, pay_date, notes, created_by)
+  values (p ->> 'direction', p ->> 'party_type',
+          coalesce(nullif(p ->> 'customer_id', '')::uuid, v_inv.customer_id),
+          coalesce(nullif(p ->> 'supplier_id', '')::uuid, v_pur.supplier_id),
+          v_inv.id, v_pur.id, v_amt, coalesce(nullif(p ->> 'method', ''), 'cash'),
+          coalesce(nullif(p ->> 'pay_date', '')::date, local_today()), p ->> 'notes', auth.uid())
+  returning * into v;
+  return v;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- أذونات التسليم: الحسابات تطلّع الإذن، والمخزن يأكد التسليم
+-- ---------------------------------------------------------------------
+create or replace function public.create_delivery_permit(p_invoice uuid, p_receiver text default null,
+                                                         p_notes text default null, p_items jsonb default null)
+returns public.delivery_permits
+language plpgsql security definer set search_path = public as $$
+declare v_inv invoices; v_dp delivery_permits; it record; v_qty numeric; v_any boolean := false;
+begin
+  perform ensure_perm('delivery', 'create');
+  select * into v_inv from invoices where id = p_invoice;
+  if not found or v_inv.kind <> 'final' or v_inv.status <> 'posted' then
+    raise exception 'إذن التسليم بيطلع لفاتورة نهائية بس';
+  end if;
+
+  insert into delivery_permits (number, invoice_id, receiver_name, notes, created_by)
+  values (next_doc_number('delivery'), p_invoice, coalesce(p_receiver, v_inv.customer_name), p_notes, auth.uid())
+  returning * into v_dp;
+
+  for it in
+    select ii.*, ii.qty - ii.delivered_qty - coalesce((
+             select sum(di.qty) from delivery_items di join delivery_permits dp on dp.id = di.permit_id
+              where di.invoice_item_id = ii.id and dp.status = 'pending' and dp.id <> v_dp.id), 0) as remaining
+      from invoice_items ii where ii.invoice_id = p_invoice order by ii.sort
+  loop
+    v_qty := case when p_items is null then it.remaining
+                  else least(it.remaining, coalesce((
+                    select (e ->> 'qty')::numeric from jsonb_array_elements(p_items) e
+                     where (e ->> 'invoice_item_id')::uuid = it.id limit 1), 0)) end;
+    if v_qty > 0 then
+      insert into delivery_items (permit_id, invoice_item_id, product_id, qty)
+      values (v_dp.id, it.id, it.product_id, v_qty);
+      v_any := true;
+    end if;
+  end loop;
+
+  if not v_any then raise exception 'كل أصناف الفاتورة دي اتسلمت أو عليها إذن تسليم'; end if;
+  return v_dp;
+end $$;
+
+create or replace function public.confirm_delivery(p_permit uuid) returns public.delivery_permits
+language plpgsql security definer set search_path = public as $$
+declare v_dp delivery_permits; it record;
+begin
+  perform ensure_perm('delivery', 'approve');
+  select * into v_dp from delivery_permits where id = p_permit for update;
+  if not found or v_dp.status <> 'pending' then raise exception 'الإذن ده مش منتظر تسليم'; end if;
+  for it in select * from delivery_items where permit_id = p_permit loop
+    update invoice_items set delivered_qty = delivered_qty + it.qty where id = it.invoice_item_id;
+  end loop;
+  update delivery_permits set status = 'delivered', delivered_by = auth.uid(), delivered_at = now()
+   where id = p_permit returning * into v_dp;
+  return v_dp;
+end $$;
+
+create or replace function public.cancel_delivery(p_permit uuid) returns public.delivery_permits
+language plpgsql security definer set search_path = public as $$
+declare v_dp delivery_permits;
+begin
+  perform ensure_perm('delivery', 'cancel');
+  update delivery_permits set status = 'cancelled' where id = p_permit and status = 'pending'
+  returning * into v_dp;
+  if v_dp.id is null then raise exception 'الإذن ده مينفعش يتلغي'; end if;
+  return v_dp;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- الحضور والانصراف (الوقت من السيرفر مش من الجهاز)
+-- ---------------------------------------------------------------------
+create or replace function public.my_employee() returns public.employees
+language sql stable security definer set search_path = public as $$
+  select * from employees where user_id = auth.uid() and is_active limit 1
+$$;
+
+create or replace function public.check_in() returns public.attendance
+language plpgsql security definer set search_path = public as $$
+declare v_emp employees; v_set settings; v_late int; v_now time; a attendance;
+begin
+  select * into v_emp from employees where user_id = auth.uid() and is_active;
+  if not found then raise exception 'حسابك مش مربوط بموظف، كلّم الأدمن'; end if;
+  select * into v_set from settings where id = 1;
+  v_now := (now() at time zone 'Africa/Khartoum')::time;
+  v_late := greatest(0, (extract(epoch from (v_now - v_set.work_start)) / 60)::int);
+  if v_late <= v_set.late_grace_minutes then v_late := 0; end if;
+  insert into attendance (employee_id, work_date, check_in, late_minutes)
+  values (v_emp.id, local_today(), now(), v_late)
+  on conflict (employee_id, work_date) do nothing
+  returning * into a;
+  if a.id is null then raise exception 'إنت سجلت حضور النهارده قبل كده'; end if;
+  return a;
+end $$;
+
+create or replace function public.check_out() returns public.attendance
+language plpgsql security definer set search_path = public as $$
+declare a attendance;
+begin
+  update attendance set check_out = now()
+   where employee_id = (select id from employees where user_id = auth.uid())
+     and work_date = local_today() and check_in is not null and check_out is null
+  returning * into a;
+  if a.id is null then raise exception 'مفيش حضور مفتوح النهارده عشان تسجل انصراف'; end if;
+  return a;
+end $$;
+
+-- تعديل الحضور من الأدمن (بيتسجل وبيوصل عليه إشعار)
+create or replace function public.admin_set_attendance(p jsonb) returns public.attendance
+language plpgsql security definer set search_path = public as $$
+declare a attendance;
+begin
+  perform ensure_perm('attendance', 'edit');
+  insert into attendance (employee_id, work_date, check_in, check_out, late_minutes, status, note, edited_by)
+  values ((p ->> 'employee_id')::uuid, (p ->> 'work_date')::date,
+          nullif(p ->> 'check_in', '')::timestamptz, nullif(p ->> 'check_out', '')::timestamptz,
+          coalesce(nullif(p ->> 'late_minutes', '')::int, 0), coalesce(p ->> 'status', 'present'),
+          p ->> 'note', auth.uid())
+  on conflict (employee_id, work_date) do update
+     set check_in = excluded.check_in, check_out = excluded.check_out,
+         late_minutes = excluded.late_minutes, status = excluded.status,
+         note = excluded.note, edited_by = excluded.edited_by
+  returning * into a;
+  return a;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- المرتبات: مرتب + نسبة مبيعات − خصومات − سلف − تأخير
+-- ---------------------------------------------------------------------
+create or replace function public.period_sales(p_from date, p_to date, p_user uuid default null)
+returns numeric
+language sql stable security definer set search_path = public as $$
+  select coalesce(sum(total_sdg), 0) from invoices
+   where kind = 'final' and status = 'posted'
+     and invoice_date >= p_from and invoice_date < p_to
+     and (p_user is null or salesperson_id = p_user)
+$$;
+
+create or replace function public.generate_payroll(p_period text) returns int
+language plpgsql security definer set search_path = public as $$
+declare
+  d1 date := month_start(p_period);
+  d2 date := (month_start(p_period) + interval '1 month')::date;
+  e employees; v_set settings;
+  v_sales numeric; v_comm numeric; v_ded numeric; v_adv numeric; v_late int; v_abs int; n int := 0;
+begin
+  perform ensure_perm('payroll', 'create');
+  select * into v_set from settings where id = 1;
+  for e in select * from employees where is_active loop
+    if exists (select 1 from payrolls where period = p_period and employee_id = e.id and status = 'paid') then
+      continue;
+    end if;
+    v_sales := case when e.commission_basis = 'total' then period_sales(d1, d2)
+                    when e.user_id is null then 0
+                    else period_sales(d1, d2, e.user_id) end;
+    v_comm := round(v_sales * e.commission_pct / 100.0, 2);
+    select coalesce(sum(amount_sdg), 0) into v_ded from salary_deductions
+     where employee_id = e.id and payroll_id is null and deduction_date < d2;
+    select coalesce(sum(amount_sdg), 0) into v_adv from salary_advances
+     where employee_id = e.id and payroll_id is null and advance_date < d2;
+    select coalesce(sum(late_minutes), 0), count(*) filter (where status = 'absent')
+      into v_late, v_abs from attendance
+     where employee_id = e.id and work_date >= d1 and work_date < d2;
+
+    insert into payrolls (period, employee_id, base_salary, sales_base, commission, deductions, advances,
+                          late_minutes, late_deduction, absent_days, net)
+    values (p_period, e.id, e.base_salary, v_sales, v_comm, v_ded, v_adv, v_late,
+            round(v_late * v_set.late_deduction_per_min, 2), v_abs,
+            e.base_salary + v_comm - v_ded - v_adv - round(v_late * v_set.late_deduction_per_min, 2))
+    on conflict (period, employee_id) do update
+       set base_salary = excluded.base_salary, sales_base = excluded.sales_base,
+           commission = excluded.commission, deductions = excluded.deductions,
+           advances = excluded.advances, late_minutes = excluded.late_minutes,
+           late_deduction = excluded.late_deduction, absent_days = excluded.absent_days,
+           net = excluded.net, created_at = now();
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+
+create or replace function public.pay_payroll(p_id uuid) returns public.payrolls
+language plpgsql security definer set search_path = public as $$
+declare v payrolls; d2 date; v_cat uuid; v_name text;
+begin
+  perform ensure_perm('payroll', 'approve');
+  select * into v from payrolls where id = p_id for update;
+  if not found or v.status <> 'draft' then raise exception 'المرتب ده اتصرف قبل كده'; end if;
+  d2 := (month_start(v.period) + interval '1 month')::date;
+  update salary_advances set payroll_id = p_id
+   where employee_id = v.employee_id and payroll_id is null and advance_date < d2;
+  update salary_deductions set payroll_id = p_id
+   where employee_id = v.employee_id and payroll_id is null and deduction_date < d2;
+  update payrolls set status = 'paid', paid_at = now() where id = p_id returning * into v;
+
+  select id into v_cat from expense_categories where name = 'رواتب';
+  select full_name into v_name from employees where id = v.employee_id;
+  -- المصروف الحقيقي = المرتب + العمولة − الخصومات (السلفة اتصرفت قبل كده)
+  if v.base_salary + v.commission - v.deductions - v.late_deduction > 0 then
+    insert into expenses (category_id, amount_sdg, description, ref_type, ref_id, created_by)
+    values (v_cat, v.base_salary + v.commission - v.deductions - v.late_deduction,
+            'مرتب ' || v_name || ' — ' || v.period, 'payroll', v.id, auth.uid());
+  end if;
+  return v;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- المساهمون
+-- ---------------------------------------------------------------------
+create or replace function public.shareholder_terms_at(p_sh uuid, p_date date)
+returns public.shareholder_terms
+language sql stable security definer set search_path = public as $$
+  select * from shareholder_terms where shareholder_id = p_sh and effective_from <= p_date
+  order by effective_from desc, created_at desc limit 1
+$$;
+
+create or replace function public.generate_shareholder_payouts(p_period text) returns int
+language plpgsql security definer set search_path = public as $$
+declare
+  d1 date := month_start(p_period);
+  d2 date := (month_start(p_period) + interval '1 month')::date;
+  s shareholders; t shareholder_terms; v_sales numeric; n int := 0;
+begin
+  perform ensure_perm('shareholders', 'create');
+  v_sales := period_sales(d1, d2);
+  for s in select * from shareholders
+            where joined_at < d2 and (left_at is null or left_at >= d1) loop
+    if exists (select 1 from shareholder_payouts where period = p_period and shareholder_id = s.id and status = 'paid') then
+      continue;
+    end if;
+    t := shareholder_terms_at(s.id, (d2 - 1));
+    if t.id is null then continue; end if;
+    insert into shareholder_payouts (shareholder_id, period, salary, sales_base, sales_pct, sales_share, total)
+    values (s.id, p_period, t.monthly_salary, v_sales, t.sales_pct,
+            round(v_sales * t.sales_pct / 100.0, 2),
+            t.monthly_salary + round(v_sales * t.sales_pct / 100.0, 2))
+    on conflict (period, shareholder_id) do update
+       set salary = excluded.salary, sales_base = excluded.sales_base, sales_pct = excluded.sales_pct,
+           sales_share = excluded.sales_share, total = excluded.total, created_at = now();
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+
+create or replace function public.pay_shareholder_payout(p_id uuid) returns public.shareholder_payouts
+language plpgsql security definer set search_path = public as $$
+declare v shareholder_payouts;
+begin
+  perform ensure_perm('shareholders', 'approve');
+  update shareholder_payouts set status = 'paid', paid_at = now()
+   where id = p_id and status = 'draft' returning * into v;
+  if v.id is null then raise exception 'المبلغ ده اتصرف قبل كده'; end if;
+  return v;
+end $$;
+
+-- تقرير الأرباح السنوية + نصيب كل مساهم
+create or replace function public.annual_report(p_year int) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare
+  d1 date := make_date(p_year, 1, 1);
+  d2 date := make_date(p_year + 1, 1, 1);
+  v_sales numeric; v_cogs numeric; v_disc numeric; v_exp numeric; v_net numeric; v_paid_sh numeric;
+  v_months jsonb; v_cats jsonb; v_sh jsonb;
+begin
+  perform ensure_perm('reports', 'view');
+  select coalesce(sum(total_sdg), 0), coalesce(sum(cost_sdg), 0), coalesce(sum(discount_sdg), 0)
+    into v_sales, v_cogs, v_disc from invoices
+   where kind = 'final' and status = 'posted' and invoice_date >= d1 and invoice_date < d2;
+  select coalesce(sum(amount_sdg), 0) into v_exp from expenses where expense_date >= d1 and expense_date < d2;
+  v_net := v_sales - v_cogs - v_exp;
+  select coalesce(sum(total), 0) into v_paid_sh from shareholder_payouts
+   where period >= to_char(d1, 'YYYY-MM') and period < to_char(d2, 'YYYY-MM') and status = 'paid';
+
+  select jsonb_agg(m order by (m ->> 'month')) into v_months from (
+    select jsonb_build_object(
+      'month', to_char(gs, 'YYYY-MM'),
+      'sales', (select coalesce(sum(total_sdg), 0) from invoices where kind = 'final' and status = 'posted'
+                 and invoice_date >= gs and invoice_date < gs + interval '1 month'),
+      'cogs', (select coalesce(sum(cost_sdg), 0) from invoices where kind = 'final' and status = 'posted'
+                 and invoice_date >= gs and invoice_date < gs + interval '1 month'),
+      'expenses', (select coalesce(sum(amount_sdg), 0) from expenses
+                 where expense_date >= gs and expense_date < gs + interval '1 month')) m
+    from generate_series(d1, d2 - 1, interval '1 month') gs) x;
+
+  select coalesce(jsonb_agg(jsonb_build_object('name', c.name, 'kind', c.kind, 'total', t.total) order by t.total desc), '[]')
+    into v_cats from (select category_id, sum(amount_sdg) total from expenses
+                       where expense_date >= d1 and expense_date < d2 group by category_id) t
+    join expense_categories c on c.id = t.category_id;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'id', s.id, 'name', s.full_name,
+           'profit_pct', coalesce(t.profit_pct, 0),
+           'profit_share', round(greatest(v_net, 0) * coalesce(t.profit_pct, 0) / 100.0, 2),
+           'received', coalesce(pd.total, 0),
+           'remaining', round(greatest(v_net, 0) * coalesce(t.profit_pct, 0) / 100.0, 2) - coalesce(pd.total, 0))
+         order by s.full_name), '[]')
+    into v_sh
+    from shareholders s
+    left join lateral (select * from shareholder_terms_at(s.id, least(d2 - 1, coalesce(s.left_at, d2 - 1)))) t on true
+    left join lateral (select sum(total) total from shareholder_payouts
+                        where shareholder_id = s.id and status = 'paid'
+                          and period >= to_char(d1, 'YYYY-MM') and period < to_char(d2, 'YYYY-MM')) pd on true
+   where s.joined_at < d2 and (s.left_at is null or s.left_at >= d1);
+
+  return jsonb_build_object(
+    'year', p_year, 'sales', v_sales, 'discounts', v_disc, 'cogs', v_cogs,
+    'gross_profit', v_sales - v_cogs, 'expenses', v_exp, 'net_profit', v_net,
+    'shareholder_paid', v_paid_sh, 'months', coalesce(v_months, '[]'), 'expense_categories', v_cats,
+    'shareholders', v_sh);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- لوحة التحكم
+-- ---------------------------------------------------------------------
+create or replace function public.dashboard(p_from date, p_to date) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare
+  v_rate numeric := coalesce(current_rate(), latest_rate(), 0);
+  r jsonb;
+  -- اللي معندوش صلاحية التقارير: مبيعاته هو بس
+  v_me uuid := case when has_perm('reports', 'view') then null else auth.uid() end;
+begin
+  if not is_active_user() then raise exception 'غير مصرح'; end if;
+  select jsonb_build_object(
+    'rate_today', current_rate(),
+    'rate_latest', latest_rate(),
+    'sales', (select coalesce(sum(total_sdg), 0) from invoices where kind = 'final' and status = 'posted' and invoice_date between p_from and p_to and (v_me is null or salesperson_id = v_me)),
+    'sales_count', (select count(*) from invoices where kind = 'final' and status = 'posted' and invoice_date between p_from and p_to and (v_me is null or salesperson_id = v_me)),
+    'cogs', (select coalesce(sum(cost_sdg), 0) from invoices where kind = 'final' and status = 'posted' and invoice_date between p_from and p_to and (v_me is null or salesperson_id = v_me)),
+    'purchases', (select coalesce(sum(total_sdg), 0) from purchases where status = 'posted' and purchase_date between p_from and p_to),
+    'expenses', (select coalesce(sum(amount_sdg), 0) from expenses where expense_date between p_from and p_to),
+    'collected', (select coalesce(sum(case when direction = 'in' then amount_sdg else -amount_sdg end), 0) from payments where party_type = 'customer' and pay_date between p_from and p_to),
+    'receivables', (select coalesce(sum(total_sdg - paid_sdg), 0) from invoices where kind = 'final' and status = 'posted'),
+    'payables', (select coalesce(sum(total_sdg - paid_sdg), 0) from purchases where status = 'posted'),
+    'stock_value_sdg', (select coalesce(sum(qty_on_hand * cost_usd), 0) * v_rate from products where is_active),
+    'stock_units', (select coalesce(sum(qty_on_hand), 0) from products where is_active),
+    'products_count', (select count(*) from products where is_active),
+    'low_stock', (select count(*) from products where is_active and qty_on_hand <= min_qty),
+    'open_proformas', (select count(*) from invoices where kind = 'proforma' and status = 'open'),
+    'open_proformas_total', (select coalesce(sum(total_sdg), 0) from invoices where kind = 'proforma' and status = 'open'),
+    'pending_deliveries', (select count(*) from delivery_permits where status = 'pending'),
+    'daily', (select coalesce(jsonb_agg(jsonb_build_object('day', d::date, 'sales', coalesce(s.total, 0)) order by d), '[]')
+                from generate_series(p_from, p_to, interval '1 day') d
+                left join (select invoice_date, sum(total_sdg) total from invoices
+                            where kind = 'final' and status = 'posted' and invoice_date between p_from and p_to and (v_me is null or salesperson_id = v_me)
+                            group by invoice_date) s on s.invoice_date = d::date),
+    'top_products', (select coalesce(jsonb_agg(t), '[]') from (
+                       select ii.name, ii.code, sum(ii.qty) qty, sum(ii.total_sdg) total
+                         from invoice_items ii join invoices i on i.id = ii.invoice_id
+                        where i.kind = 'final' and i.status = 'posted' and i.invoice_date between p_from and p_to and (v_me is null or i.salesperson_id = v_me)
+                        group by ii.name, ii.code order by sum(ii.total_sdg) desc limit 6) t),
+    'top_sellers', (select coalesce(jsonb_agg(t), '[]') from (
+                       select coalesce(nullif(p.full_name, ''), p.username) as name, count(*) invoices, sum(i.total_sdg) total
+                         from invoices i join profiles p on p.id = i.salesperson_id
+                        where i.kind = 'final' and i.status = 'posted' and i.invoice_date between p_from and p_to and (v_me is null or i.salesperson_id = v_me)
+                        group by 1 order by sum(i.total_sdg) desc limit 5) t)
+  ) into r;
+  if v_me is not null then
+    r := r - 'cogs' - 'purchases' - 'expenses' - 'collected' - 'receivables' - 'payables' - 'stock_value_sdg' - 'top_sellers'
+           || jsonb_build_object('limited', true);
+  end if;
+  return r;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- العروض (Views)
+-- ---------------------------------------------------------------------
+-- من غير security_invoker: الكميات (الكلي/المباع/المسحوب/المحجوز) لازم تظهر لموظف المعرض
+-- حتى لو مش مسموحله يشوف حركات المخزن نفسها
+drop view if exists public.v_products;
+create view public.v_products as
+select p.*,
+       c.name as category_name,
+       round(p.price_usd * coalesce(public.current_rate(), public.latest_rate(), 0), 2) as price_sdg,
+       coalesce((select sum(m.qty) from public.stock_movements m
+                  where m.product_id = p.id and m.kind in ('purchase_in', 'opening', 'adjust_in')), 0) as total_in,
+       coalesce((select sum(ii.qty) from public.invoice_items ii join public.invoices i on i.id = ii.invoice_id
+                  where ii.product_id = p.id and i.kind = 'final' and i.status = 'posted'), 0) as sold_qty,
+       coalesce((select sum(ii.delivered_qty) from public.invoice_items ii join public.invoices i on i.id = ii.invoice_id
+                  where ii.product_id = p.id and i.kind = 'final' and i.status = 'posted'), 0) as withdrawn_qty,
+       coalesce((select sum(ii.qty) from public.invoice_items ii join public.invoices i on i.id = ii.invoice_id
+                  where ii.product_id = p.id and i.kind = 'proforma' and i.status = 'open'), 0) as reserved_qty
+  from public.products p
+  left join public.categories c on c.id = p.category_id;
+
+create or replace view public.v_invoices with (security_invoker = on) as
+select i.*,
+       coalesce(nullif(u.full_name, ''), u.username) as created_by_name,
+       coalesce(nullif(sp.full_name, ''), sp.username) as salesperson_name,
+       i.total_sdg - i.paid_sdg as remaining_sdg,
+       (select count(*) from public.invoice_items ii where ii.invoice_id = i.id) as items_count,
+       (select coalesce(sum(ii.qty - ii.delivered_qty), 0) from public.invoice_items ii where ii.invoice_id = i.id) as undelivered_qty
+  from public.invoices i
+  left join public.profiles u on u.id = i.created_by
+  left join public.profiles sp on sp.id = i.salesperson_id;
+
+create or replace view public.v_purchases with (security_invoker = on) as
+select pu.*, s.name as supplier_name,
+       coalesce(nullif(u.full_name, ''), u.username) as created_by_name,
+       pu.total_sdg - pu.paid_sdg as remaining_sdg
+  from public.purchases pu
+  left join public.suppliers s on s.id = pu.supplier_id
+  left join public.profiles u on u.id = pu.created_by;
+
+create or replace view public.v_customer_balances with (security_invoker = on) as
+select c.*,
+       coalesce((select sum(total_sdg) from public.invoices where customer_id = c.id and kind = 'final' and status = 'posted'), 0) as total_sales,
+       coalesce((select sum(total_sdg - paid_sdg) from public.invoices where customer_id = c.id and kind = 'final' and status = 'posted'), 0) as balance,
+       (select count(*) from public.invoices where customer_id = c.id and kind = 'final' and status = 'posted') as invoices_count
+  from public.customers c;
+
+create or replace view public.v_supplier_balances with (security_invoker = on) as
+select s.*,
+       coalesce((select sum(total_sdg) from public.purchases where supplier_id = s.id and status = 'posted'), 0) as total_purchases,
+       s.opening_balance + coalesce((select sum(total_sdg - paid_sdg) from public.purchases where supplier_id = s.id and status = 'posted'), 0) as balance
+  from public.suppliers s;
+
+create or replace view public.v_delivery_permits with (security_invoker = on) as
+select d.*, i.number as invoice_number, i.customer_name, i.customer_phone,
+       coalesce(nullif(u.full_name, ''), u.username) as created_by_name,
+       coalesce(nullif(w.full_name, ''), w.username) as delivered_by_name,
+       (select coalesce(sum(qty), 0) from public.delivery_items where permit_id = d.id) as total_qty
+  from public.delivery_permits d
+  join public.invoices i on i.id = d.invoice_id
+  left join public.profiles u on u.id = d.created_by
+  left join public.profiles w on w.id = d.delivered_by;
+
+create or replace view public.v_expenses with (security_invoker = on) as
+select e.*, c.name as category_name, c.kind as category_kind,
+       coalesce(nullif(u.full_name, ''), u.username) as created_by_name
+  from public.expenses e
+  join public.expense_categories c on c.id = e.category_id
+  left join public.profiles u on u.id = e.created_by;
+
+create or replace view public.v_payments with (security_invoker = on) as
+select p.*, c.name as customer_name, s.name as supplier_name,
+       i.number as invoice_number, pu.number as purchase_number,
+       coalesce(nullif(u.full_name, ''), u.username) as created_by_name
+  from public.payments p
+  left join public.customers c on c.id = p.customer_id
+  left join public.suppliers s on s.id = p.supplier_id
+  left join public.invoices i on i.id = p.invoice_id
+  left join public.purchases pu on pu.id = p.purchase_id
+  left join public.profiles u on u.id = p.created_by;
+
+create or replace view public.v_attendance with (security_invoker = on) as
+select a.*, e.full_name as employee_name, e.job_title,
+       coalesce(nullif(u.full_name, ''), u.username) as edited_by_name
+  from public.attendance a
+  join public.employees e on e.id = a.employee_id
+  left join public.profiles u on u.id = a.edited_by;
+
+create or replace view public.v_payrolls with (security_invoker = on) as
+select p.*, e.full_name as employee_name, e.job_title
+  from public.payrolls p join public.employees e on e.id = p.employee_id;
+
+create or replace view public.v_shareholders with (security_invoker = on) as
+select s.*, t.monthly_salary, t.sales_pct, t.profit_pct, t.effective_from
+  from public.shareholders s
+  left join lateral (select * from public.shareholder_terms t
+                      where t.shareholder_id = s.id and t.effective_from <= public.local_today()
+                      order by t.effective_from desc, t.created_at desc limit 1) t on true;
+
+create or replace view public.v_shareholder_payouts with (security_invoker = on) as
+select p.*, s.full_name as shareholder_name
+  from public.shareholder_payouts p join public.shareholders s on s.id = p.shareholder_id;
+
+create or replace view public.v_employees with (security_invoker = on) as
+select e.*, u.username, u.role as user_role
+  from public.employees e left join public.profiles u on u.id = e.user_id;
+
+create or replace view public.v_stock_movements with (security_invoker = on) as
+select m.*, p.code, p.name as product_name,
+       coalesce(nullif(u.full_name, ''), u.username) as created_by_name,
+       coalesce(i.number, pu.number) as ref_number
+  from public.stock_movements m
+  join public.products p on p.id = m.product_id
+  left join public.profiles u on u.id = m.created_by
+  left join public.invoices i on m.ref_type = 'invoice' and i.id = m.ref_id
+  left join public.purchases pu on m.ref_type = 'purchase' and pu.id = m.ref_id;
+
+create or replace view public.v_exchange_rates with (security_invoker = on) as
+select r.*, coalesce(nullif(u.full_name, ''), u.username) as created_by_name
+  from public.exchange_rates r left join public.profiles u on u.id = r.created_by;

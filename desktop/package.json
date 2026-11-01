@@ -1,0 +1,82 @@
+{
+  "name": "wali-core",
+  "productName": "Wali Core",
+  "version": "1.0.0",
+  "description": "WALI CORE — نظام إدارة والي بلازا",
+  "author": "Zero-Nine",
+  "private": true,
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "electron": "electron .",
+    "dist": "npm run build && electron-builder --win --x64",
+    "test:db": "node scripts/test-db.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.2.17",
+    "@fontsource/cairo": "5.1.0",
+    "@fontsource/ibm-plex-sans-arabic": "5.1.0",
+    "@supabase/supabase-js": "2.45.4",
+    "@types/react": "18.3.11",
+    "@types/react-dom": "18.3.1",
+    "@vitejs/plugin-react": "4.3.3",
+    "autoprefixer": "10.4.20",
+    "electron": "33.0.2",
+    "electron-builder": "25.1.8",
+    "jsbarcode": "3.11.6",
+    "lucide-react": "0.453.0",
+    "postcss": "8.4.47",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-router-dom": "6.27.0",
+    "tailwindcss": "3.4.14",
+    "typescript": "5.6.3",
+    "vite": "5.4.10"
+  },
+  "allowScripts": {
+    "electron@33.0.2": true,
+    "esbuild@0.21.5": true
+  },
+  "build": {
+    "appId": "online.zero-nine.walicore",
+    "productName": "Wali Core",
+    "copyright": "Zero-Nine",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "WaliCore-Setup-${version}.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Wali Core",
+      "language": "1025",
+      "installerLanguages": [
+        "ar_SA",
+        "en_US"
+      ],
+      "multiLanguageInstaller": false
+    }
+  }
+}

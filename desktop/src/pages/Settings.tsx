@@ -1,0 +1,179 @@
+import { useEffect, useState } from 'react'
+import { Settings as Cog, Building2, Clock, DatabaseBackup, ScrollText, ImagePlus, Download, Unplug } from 'lucide-react'
+import { useApp, useLoad, useAction } from '../lib/app'
+import { PageHeader, Field, Tabs, Loading, Badge, Empty, useConfirm, NoAccess } from '../components/ui'
+import { saveConn } from '../lib/backend'
+import { dateTime } from '../lib/format'
+
+const TABLES = ['settings', 'profiles', 'categories', 'products', 'stock_movements', 'customers', 'suppliers', 'purchases', 'purchase_items',
+  'invoices', 'invoice_items', 'delivery_permits', 'delivery_items', 'payments', 'expense_categories', 'expenses', 'exchange_rates',
+  'employees', 'attendance', 'salary_advances', 'salary_deductions', 'payrolls', 'shareholders', 'shareholder_terms', 'shareholder_payouts', 'doc_counters']
+
+const ACTION: Record<string, { label: string; cls: string }> = {
+  insert: { label: 'إضافة', cls: 'bg-emerald-500/15 text-emerald-300' },
+  update: { label: 'تعديل', cls: 'bg-amber-500/15 text-amber-300' },
+  delete: { label: 'حذف', cls: 'bg-red-500/15 text-red-300' },
+}
+
+export default function Settings() {
+  const { can, isAdmin, db } = useApp()
+  const [tab, setTab] = useState<'company' | 'work' | 'backup' | 'audit'>('company')
+  if (!can('settings')) return <NoAccess />
+  return (
+    <>
+      <PageHeader title="الإعدادات" icon={<Cog size={22} />} />
+      <Tabs value={tab} onChange={setTab} items={[
+        { key: 'company', label: <span className="flex items-center gap-2"><Building2 size={15} /> الشركة والفاتورة</span> },
+        { key: 'work', label: <span className="flex items-center gap-2"><Clock size={15} /> مواعيد الشغل</span> },
+        { key: 'backup', label: <span className="flex items-center gap-2"><DatabaseBackup size={15} /> نسخ احتياطي</span> },
+        ...(isAdmin ? [{ key: 'audit' as const, label: <span className="flex items-center gap-2"><ScrollText size={15} /> سجل التدقيق</span> }] : []),
+      ]} />
+      <div className="mt-5">
+        {tab === 'company' && <CompanyForm />}
+        {tab === 'work' && <WorkForm />}
+        {tab === 'backup' && <Backup />}
+        {tab === 'audit' && <Audit />}
+      </div>
+      <div className="mt-10 text-[12px] text-zinc-600">متصل بـ: {db.mode === 'demo' ? 'وضع التجربة (على الجهاز ده)' : (db as any).sb?.supabaseUrl}</div>
+    </>
+  )
+}
+
+function useSettingsForm() {
+  const { db, settings, reloadSettings, can } = useApp()
+  const { busy, run } = useAction()
+  const [f, setF] = useState<any>(settings)
+  useEffect(() => setF(settings), [settings])
+  const save = async (keys: string[]) => {
+    const patch = Object.fromEntries(keys.map((k) => [k, f[k] === '' ? null : f[k]]))
+    if (await run(() => db.update('settings', 1, patch), 'الإعدادات اتحفظت')) reloadSettings()
+  }
+  return { f, setF, save, busy, canEdit: can('settings', 'edit') }
+}
+
+function CompanyForm() {
+  const { f, setF, save, busy, canEdit } = useSettingsForm()
+  const keys = ['company_name', 'company_name_en', 'phone1', 'phone2', 'email', 'address', 'logo', 'invoice_footer']
+  const onLogo = async (file: File) => {
+    const img = new Image(); img.src = URL.createObjectURL(file); await img.decode()
+    const s = Math.min(1, 300 / Math.max(img.width, img.height))
+    const c = document.createElement('canvas'); c.width = img.width * s; c.height = img.height * s
+    c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height)
+    setF({ ...f, logo: c.toDataURL('image/png') })
+  }
+  return (
+    <div className="card p-6 max-w-4xl grid grid-cols-[180px_1fr] gap-6">
+      <div>
+        <label className="block aspect-square rounded-2xl border-2 border-dashed border-ink-600 hover:border-brand-500/60 bg-white/95 overflow-hidden cursor-pointer">
+          {f.logo ? <img src={f.logo} className="w-full h-full object-contain p-3" /> : <div className="h-full flex flex-col items-center justify-center text-zinc-500 gap-2"><ImagePlus size={28} /><span className="text-sm">لوجو الفاتورة</span></div>}
+          <input type="file" accept="image/*" className="hidden" disabled={!canEdit} onChange={(e) => e.target.files?.[0] && onLogo(e.target.files[0])} />
+        </label>
+        {f.logo && canEdit && <button className="text-[12px] text-red-300 mt-2" onClick={() => setF({ ...f, logo: null })}>شيل اللوجو</button>}
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="اسم الشركة"><input className="input" value={f.company_name ?? ''} onChange={(e) => setF({ ...f, company_name: e.target.value })} /></Field>
+        <Field label="الاسم بالإنجليزي"><input className="input" dir="ltr" value={f.company_name_en ?? ''} onChange={(e) => setF({ ...f, company_name_en: e.target.value })} /></Field>
+        <Field label="تليفون 1"><input className="input num" dir="ltr" value={f.phone1 ?? ''} onChange={(e) => setF({ ...f, phone1: e.target.value })} /></Field>
+        <Field label="تليفون 2"><input className="input num" dir="ltr" value={f.phone2 ?? ''} onChange={(e) => setF({ ...f, phone2: e.target.value })} /></Field>
+        <Field label="الإيميل"><input className="input" dir="ltr" value={f.email ?? ''} onChange={(e) => setF({ ...f, email: e.target.value })} /></Field>
+        <Field label="العنوان"><input className="input" value={f.address ?? ''} onChange={(e) => setF({ ...f, address: e.target.value })} /></Field>
+        <Field label="جملة آخر الفاتورة" className="col-span-2"><input className="input" value={f.invoice_footer ?? ''} onChange={(e) => setF({ ...f, invoice_footer: e.target.value })} /></Field>
+        {canEdit && <div className="col-span-2"><button className="btn-primary" disabled={busy} onClick={() => save(keys)}>حفظ</button></div>}
+      </div>
+    </div>
+  )
+}
+
+function WorkForm() {
+  const { f, setF, save, busy, canEdit } = useSettingsForm()
+  return (
+    <div className="card p-6 max-w-2xl grid grid-cols-2 gap-4">
+      <Field label="بداية الشغل"><input type="time" className="input" value={String(f.work_start ?? '').slice(0, 5)} onChange={(e) => setF({ ...f, work_start: e.target.value })} /></Field>
+      <Field label="نهاية الشغل"><input type="time" className="input" value={String(f.work_end ?? '').slice(0, 5)} onChange={(e) => setF({ ...f, work_end: e.target.value })} /></Field>
+      <Field label="دقايق السماح قبل ما يتحسب تأخير"><input className="input num" value={f.late_grace_minutes ?? ''} onChange={(e) => setF({ ...f, late_grace_minutes: e.target.value.replace(/\D/g, '') })} /></Field>
+      <Field label="خصم كل دقيقة تأخير (ج.س)" hint="صفر = التأخير بيتسجل بس من غير خصم"><input className="input num" value={f.late_deduction_per_min ?? ''} onChange={(e) => setF({ ...f, late_deduction_per_min: e.target.value.replace(/[^\d.]/g, '') })} /></Field>
+      <Field label="حد التنبيه الافتراضي للمخزن"><input className="input num" value={f.low_stock_default ?? ''} onChange={(e) => setF({ ...f, low_stock_default: e.target.value.replace(/[^\d.]/g, '') })} /></Field>
+      {canEdit && <div className="col-span-2"><button className="btn-primary" disabled={busy} onClick={() => save(['work_start', 'work_end', 'late_grace_minutes', 'late_deduction_per_min', 'low_stock_default'])}>حفظ</button></div>}
+    </div>
+  )
+}
+
+function Backup() {
+  const { db, isAdmin, toast } = useApp()
+  const [busy, setBusy] = useState('')
+  const confirm = useConfirm()
+  const exportAll = async () => {
+    const out: Record<string, any[]> = {}
+    for (const t of TABLES) {
+      setBusy(`بنصدّر ${t}...`)
+      try { out[t] = await db.list(t) } catch { out[t] = [] }
+    }
+    setBusy('')
+    const name = `wali-core-backup-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`
+    const json = JSON.stringify({ app: 'wali-core', version: 1, created_at: new Date().toISOString(), tables: out })
+    const w = (window as any).wali
+    if (w?.saveFile) {
+      const p = await w.saveFile(name, json)
+      if (p) toast('النسخة اتحفظت في: ' + p)
+    } else {
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' })); a.download = name; a.click()
+      toast('النسخة اتنزلت')
+    }
+  }
+  return (
+    <div className="max-w-3xl space-y-4">
+      <div className="card p-6">
+        <div className="font-bold text-lg flex items-center gap-2"><DatabaseBackup size={20} className="text-brand-500" /> نسخة احتياطية كاملة</div>
+        <p className="text-sm text-zinc-400 mt-2 leading-7">بيصدّر كل البيانات (الأصناف، الفواتير، الحسابات، الموظفين، المساهمين...) في ملف واحد. احفظه على فلاشة أو على D بعيد عن البرنامج.</p>
+        <button className="btn-primary mt-4" disabled={!!busy || !isAdmin} onClick={exportAll}><Download size={17} /> {busy || 'صدّر نسخة دلوقتي'}</button>
+        {!isAdmin && <p className="text-[12px] text-zinc-500 mt-2">النسخ الاحتياطي للأدمن بس.</p>}
+      </div>
+      <div className="card p-6">
+        <div className="font-bold flex items-center gap-2"><Unplug size={18} className="text-zinc-400" /> قاعدة البيانات</div>
+        <p className="text-sm text-zinc-400 mt-2">لو عايز تربط الجهاز ده بقاعدة بيانات تانية (أو تخرج من وضع التجربة).</p>
+        <button className="btn-danger mt-4" onClick={async () => { if (await confirm.ask('فصل الجهاز عن قاعدة البيانات؟', { danger: true, text: 'هتحتاج تدخل بيانات Supabase تاني. البيانات نفسها مش هتتمسح.' })) { saveConn(null); location.reload() } }}>فصل وإعادة الإعداد</button>
+      </div>
+      {confirm.node}
+    </div>
+  )
+}
+
+function Audit() {
+  const { db } = useApp()
+  const [table, setTable] = useState('')
+  const [open, setOpen] = useState<any>(null)
+  const { data, loading } = useLoad(() => db.list('audit_log', { eq: table ? { table_name: table } : {}, order: [{ col: 'created_at', asc: false }], limit: 300 }), [table])
+  return (
+    <>
+      <select className="input w-64 h-10 mb-4" value={table} onChange={(e) => setTable(e.target.value)}>
+        <option value="">كل الجداول</option>{TABLES.map((t) => <option key={t}>{t}</option>)}</select>
+      <div className="card overflow-hidden">
+        {loading ? <Loading /> : !data?.length ? <Empty /> : (
+          <div className="max-h-[calc(100vh-330px)] overflow-auto">
+            <table className="tbl">
+              <thead><tr><th>الوقت</th><th>المستخدم</th><th>العملية</th><th>الجدول</th><th>التغيير</th></tr></thead>
+              <tbody>{data.map((a: any) => {
+                const changed = a.action === 'update' ? Object.keys(a.new_data ?? {}).filter((k) => JSON.stringify(a.new_data[k]) !== JSON.stringify(a.old_data?.[k]) && k !== 'updated_at') : []
+                return (
+                  <tr key={a.id} className="cursor-pointer" onClick={() => setOpen(a)}>
+                    <td className="text-zinc-400 text-[13px] num">{dateTime(a.created_at)}</td><td>{a.user_name ?? 'النظام'}</td>
+                    <td><Badge cls={ACTION[a.action].cls}>{ACTION[a.action].label}</Badge></td><td className="num text-zinc-400">{a.table_name}</td>
+                    <td className="text-[12px] text-zinc-500 num max-w-[380px] truncate">{changed.join('، ')}</td>
+                  </tr>
+                )
+              })}</tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      {open && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-8" onClick={() => setOpen(null)}>
+          <div className="card p-6 max-w-4xl w-full max-h-[80vh] overflow-auto grid grid-cols-2 gap-4 selectable" onClick={(e) => e.stopPropagation()}>
+            <div><div className="font-bold mb-2 text-red-300">قبل</div><pre className="text-[11px] text-zinc-400 whitespace-pre-wrap num" dir="ltr">{JSON.stringify(open.old_data, null, 2)}</pre></div>
+            <div><div className="font-bold mb-2 text-emerald-300">بعد</div><pre className="text-[11px] text-zinc-300 whitespace-pre-wrap num" dir="ltr">{JSON.stringify(open.new_data, null, 2)}</pre></div>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}

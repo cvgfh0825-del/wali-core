@@ -1,0 +1,30 @@
+@import '@fontsource/ibm-plex-sans-arabic/400.css';
+@import '@fontsource/ibm-plex-sans-arabic/500.css';
+@import '@fontsource/ibm-plex-sans-arabic/600.css';
+@import '@fontsource/ibm-plex-sans-arabic/700.css';
+@import '@fontsource/cairo/800.css';
+@import '@fontsource/cairo/900.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; }
+html, body, #root { min-height: 100%; }
+body {
+  @apply bg-ink-950 text-zinc-100 font-sans antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: contain;
+}
+.safe-top { padding-top: max(env(safe-area-inset-top), 12px); }
+.safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 12px); }
+.num { font-family: 'Cairo', 'IBM Plex Sans Arabic', sans-serif; font-variant-numeric: tabular-nums; }
+.input { @apply w-full h-12 px-4 rounded-2xl bg-ink-900 border border-ink-600 text-zinc-100 outline-none focus:border-brand-500 text-base; }
+.btn { @apply inline-flex items-center justify-center gap-2 h-12 px-5 rounded-2xl font-bold transition active:scale-[.97] disabled:opacity-50; }
+.btn-primary { @apply btn bg-gradient-to-l from-brand-500 to-brand-400 text-ink-950; }
+.btn-ghost { @apply btn bg-ink-800 border border-ink-600 text-zinc-200; }
+.grid-lines {
+  background-image: linear-gradient(rgba(255,122,26,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(255,122,26,.07) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+.no-scrollbar::-webkit-scrollbar { display: none; }

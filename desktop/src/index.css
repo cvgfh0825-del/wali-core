@@ -1,0 +1,85 @@
+@import '@fontsource/ibm-plex-sans-arabic/300.css';
+@import '@fontsource/ibm-plex-sans-arabic/400.css';
+@import '@fontsource/ibm-plex-sans-arabic/500.css';
+@import '@fontsource/ibm-plex-sans-arabic/600.css';
+@import '@fontsource/ibm-plex-sans-arabic/700.css';
+@import '@fontsource/cairo/700.css';
+@import '@fontsource/cairo/800.css';
+@import '@fontsource/cairo/900.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --brand: #FF7A1A;
+}
+
+html, body, #root { height: 100%; }
+body {
+  @apply bg-ink-950 text-zinc-100 font-sans antialiased;
+  font-feature-settings: 'tnum' 1;
+  overflow: hidden;
+  user-select: none;
+}
+input, textarea, [contenteditable], .selectable { user-select: text; }
+
+::selection { background: rgba(255, 122, 26, .35); }
+
+/* شريط تمرير رفيع */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2E2E35; border-radius: 99px; border: 3px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: #3D3D46; background-clip: padding-box; border: 3px solid transparent; }
+
+/* منطقة سحب النافذة في Electron */
+.drag { -webkit-app-region: drag; }
+.no-drag { -webkit-app-region: no-drag; }
+
+/* خلفية بنقط خفيفة */
+.dots {
+  background-image: radial-gradient(rgba(255,255,255,.06) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.grid-lines {
+  background-image:
+    linear-gradient(rgba(255,122,26,.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,122,26,.07) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+@layer components {
+  .card { @apply bg-ink-850 border border-ink-700/70 rounded-2xl shadow-card; }
+  .input {
+    @apply w-full h-11 px-3.5 rounded-xl bg-ink-900 border border-ink-600 text-zinc-100 placeholder:text-zinc-500
+           outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15 disabled:opacity-50;
+  }
+  textarea.input { @apply h-auto py-2.5; }
+  .label { @apply block text-[13px] text-zinc-400 mb-1.5 font-medium; }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 h-11 px-4 rounded-xl font-semibold text-sm transition
+           active:scale-[.98] disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap;
+  }
+  .btn-primary { @apply btn bg-gradient-to-l from-brand-500 to-brand-400 text-ink-950 hover:brightness-110 shadow-glow; }
+  .btn-ghost { @apply btn bg-ink-800 border border-ink-600 text-zinc-200 hover:bg-ink-700 hover:border-ink-500; }
+  .btn-danger { @apply btn bg-red-500/10 border border-red-500/30 text-red-300 hover:bg-red-500/20; }
+  .btn-sm { @apply h-9 px-3 text-[13px] rounded-lg; }
+  .chip { @apply inline-flex items-center gap-1 h-6 px-2 rounded-md text-[12px] font-semibold; }
+  .tbl { @apply w-full text-sm; }
+  .tbl th { @apply text-right font-semibold text-zinc-400 text-[12px] px-4 py-3 bg-ink-900/60 border-b border-ink-700 sticky top-0 z-10 backdrop-blur; }
+  .tbl td { @apply px-4 py-3 border-b border-ink-700/60 text-zinc-200; }
+  .tbl tbody tr { @apply transition hover:bg-ink-800/70; }
+  .num { font-family: 'Cairo', 'IBM Plex Sans Arabic', sans-serif; font-variant-numeric: tabular-nums; }
+}
+
+/* ===================== الطباعة ===================== */
+#print-root { display: none; }
+@media print {
+  @page { size: A4; margin: 10mm; }
+  html, body { background: #fff !important; overflow: visible !important; height: auto !important; }
+  body * { visibility: hidden; }
+  #print-root, #print-root * { visibility: visible; }
+  #print-root { display: block !important; position: absolute; inset: 0; color: #111; }
+  .no-print { display: none !important; }
+}
