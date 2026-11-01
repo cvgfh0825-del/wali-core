@@ -8,15 +8,20 @@ import {
 type Row = Record<string, any>
 
 // ---------------------------------------------------------------------
-// الاتصال: من ملف .env أو من شاشة الإعداد
+// الاتصال: من ملف .env، وإلا مشروع والي بلازا (المفاتيح دي عامة ومش سرية)
 // ---------------------------------------------------------------------
+const WALI = {
+  url: 'https://avqwkxoeptkbzxdckedy.supabase.co',
+  key: 'sb_publishable_P3BzxNxjqMMZeXjSlRCkYw_YjIyPZgJ',
+  vapid: 'BJu3sYzgZd0pAmDsT2JvULMu0-yas6TpcRa3DF49x8iwg_UHw9WLKoDWgaZFLUh4g705SshNOcwhr97MzsiwG9E',
+}
 function getConn() {
-  const url = import.meta.env.VITE_SUPABASE_URL as string
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+  const url = (import.meta.env.VITE_SUPABASE_URL as string) || WALI.url
+  const key = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || WALI.key
   if (url && key && !url.includes('xxxx')) return { url, key }
   try { return JSON.parse(localStorage.getItem('wali-admin-conn') || 'null') } catch { return null }
 }
-const VAPID = import.meta.env.VITE_VAPID_PUBLIC_KEY as string
+const VAPID = (import.meta.env.VITE_VAPID_PUBLIC_KEY as string) || WALI.vapid
 
 const fmt = (n: any) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Math.round(Number(n) || 0))
 const short = (n: any) => {
