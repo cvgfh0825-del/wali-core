@@ -21,6 +21,9 @@
 1. `supabase/migrations/0001_core.sql`
 2. `supabase/migrations/0002_logic.sql`
 3. `supabase/migrations/0003_security_notify.sql`
+4. `supabase/migrations/0004_push_webhook.sql` (ربط الإشعارات بالموبايل)
+5. `supabase/migrations/0005_returns.sql` (مرتجع جزئي من الفاتورة + إلغاء المشتريات)
+6. `supabase/migrations/0006_backup.sql` (النسخ الاحتياطي والاسترجاع)
 
 ### 2) أول حساب (هيبقى Admin تلقائياً)
 من **Authentication ← Users ← Add user**:

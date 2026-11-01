@@ -1,4 +1,4 @@
-// اختبار الداتا بيز على PGlite (Postgres حقيقي) — بيشغّل نفس ملفات Supabase
+﻿// اختبار الداتا بيز على PGlite (Postgres حقيقي) — بيشغّل نفس ملفات Supabase
 import { PGlite } from '@electric-sql/pglite'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -8,7 +8,7 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const mig = (f) => readFileSync(path.join(here, '../../supabase/migrations', f), 'utf8')
 const db = new PGlite()
 await db.exec(readFileSync(path.join(here, '../src/demo/bootstrap.sql'), 'utf8'))
-for (const f of ['0001_core.sql', '0002_logic.sql', '0003_security_notify.sql']) {
+for (const f of ['0001_core.sql', '0002_logic.sql', '0003_security_notify.sql', '0005_returns.sql', '0006_backup.sql']) {
   try { await db.exec(mig(f)); console.log('✔', f) }
   catch (e) { console.error('✘', f, e.message, e.position ?? ''); process.exit(1) }
 }
@@ -96,6 +96,36 @@ await one(`select cancel_invoice($1, 'العميل رجع')`, [f2.id])
 ok(Number((await one(`select qty_on_hand from products where id=$1`, [p2])).qty_on_hand) === 16, 'بعد الإلغاء المخزن رجع 16 كرسي')
 ok(Number((await one(`select paid_sdg from invoices where id=$1`, [f2.id])).paid_sdg) === 0, 'الفلوس اترجعت')
 
+// مرتجع جزئي: 4 كراسي بخصم، ومدفوعة كاملة → يرجع كرسي واحد
+const f3 = await one(`select * from save_invoice($1)`, [{ kind: 'final', customer_name: 'عميل مرتجع', discount_sdg: 20000, items: [{ product_id: p2, qty: 4 }], paid_sdg: 999999999 }])
+const f3item = await one(`select * from invoice_items where invoice_id=$1`, [f3.id])
+const ret = await one(`select * from create_sales_return($1, $2, 'كرسي مكسور')`, [f3.id, JSON.stringify([{ invoice_item_id: f3item.id, qty: 1 }])])
+const expRet = Number(f3item.unit_price_sdg) - Math.round(20000 * Number(f3item.unit_price_sdg) / Number(f3.subtotal_sdg) * 100) / 100
+ok(ret.number.startsWith('RT-') && Math.abs(Number(ret.total_sdg) - expRet) < 0.02, `مرتجع ${ret.number} بقيمة ${ret.total_sdg} (بعد نصيبه من الخصم)`)
+ok(Number((await one(`select qty_on_hand from products where id=$1`, [p2])).qty_on_hand) === 13, 'الكرسي رجع المخزن (13)')
+ok(Math.abs(Number(ret.refund_sdg) - Number(ret.total_sdg)) < 0.02, 'الفلوس اترجعت للعميل = ' + ret.refund_sdg)
+const f3v = await one(`select remaining_sdg, paid_sdg from v_invoices where id=$1`, [f3.id])
+ok(Math.abs(Number(f3v.remaining_sdg)) < 0.02, 'الفاتورة مفيهاش متبقي بعد المرتجع')
+ok(Number((await one(`select sold_qty from v_products where id=$1`, [p2])).sold_qty) === 7, 'المباع من الكراسي = 4 (الفاتورة الأولى) + 3')
+await expectErr(() => one(`select create_sales_return($1, $2, 'x')`, [f3.id, JSON.stringify([{ invoice_item_id: f3item.id, qty: 4 }])]), 'مينفعش يرجع أكتر من الباقي')
+await expectErr(() => one(`select cancel_invoice($1, 'x')`, [f3.id]), 'فاتورة عليها مرتجع متتلغيش')
+ok(Number((await one(`select count(*) c from notifications where title like 'مرتجع%'`)).c) === 1, 'إشعار المرتجع وصل للأدمن')
+await as(seller)
+await expectErr(() => one(`select create_sales_return($1, $2, 'x')`, [f3.id, JSON.stringify([{ invoice_item_id: f3item.id, qty: 1 }])]), 'سارة متقدرش تعمل مرتجع')
+await as(admin)
+
+// إلغاء مشتريات: 5 كراسي × 50$ → المخزن والتكلفة يرجعوا زي ما كانوا
+const cost0 = Number((await one(`select cost_usd from products where id=$1`, [p2])).cost_usd)
+const pur2 = await one(`select * from save_purchase($1)`, [{ supplier_id: sup, paid_sdg: 100000, items: [{ product_id: p2, qty: 5, unit_price_usd: 50 }] }])
+ok(Number((await one(`select qty_on_hand from products where id=$1`, [p2])).qty_on_hand) === 18, 'المشتريات دخلت (18)')
+const pc = await one(`select * from cancel_purchase($1, 'غلط في الكمية')`, [pur2.id])
+const p2c = await one(`select qty_on_hand, cost_usd from products where id=$1`, [p2])
+ok(pc.status === 'cancelled' && Number(p2c.qty_on_hand) === 13, 'المشتريات اتلغت والمخزن رجع 13')
+ok(Math.abs(Number(p2c.cost_usd) - cost0) < 0.01, `التكلفة رجعت ${p2c.cost_usd}$`)
+ok(Number(pc.paid_sdg) === 0, 'المدفوع للمورد اتسجل استرداد')
+await expectErr(() => one(`select cancel_purchase($1, 'x')`, [pur.id]), 'مشتريات اتباع منها متتلغيش')
+await expectErr(() => one(`select cancel_purchase($1, 'x')`, [pur2.id]), 'متتلغيش مرتين')
+
 // تسوية ونقص مخزون
 await one(`select adjust_stock($1, 1, 'جرد')`, [p1])
 ok(Number((await one(`select count(*) c from notifications where title like 'نقص مخزون%'`)).c) >= 1, 'إشعار نقص المخزون')
@@ -150,6 +180,29 @@ await as(admin)
 await as(seller)
 await db.query(`update profiles set role='admin' where id=$1`, [seller])
 ok((await one(`select role from profiles where id=$1`, [seller])).role === 'custom', 'سارة متقدرش تخلي نفسها Admin')
+
+// نسخة احتياطية واسترجاع
+await expectErr(() => one(`select export_backup()`), 'سارة متقدرش تاخد نسخة')
+await as(admin)
+const bk = (await one(`select export_backup() b`)).b
+const snap = async () => one(`select (select count(*) from invoices) i, (select count(*) from stock_movements) m,
+  (select qty_on_hand from products where id=$1) q, (select count(*) from sales_returns) r`, [p2])
+const before = await snap()
+ok(bk.tables.invoices.length === Number(before.i) && bk.tables.profiles.length === 2, `النسخة فيها ${bk.tables.invoices.length} فاتورة`)
+await one(`select save_invoice($1)`, [{ kind: 'final', items: [{ product_id: p2, qty: 2 }], paid_sdg: 999999999 }])
+const counts = (await one(`select restore_backup($1) c`, [JSON.stringify(bk)])).c
+const after = await snap()
+ok(JSON.stringify(after) === JSON.stringify(before), `بعد الاسترجاع كل حاجة رجعت زي ما كانت (المخزن ${after.q})`)
+ok(Number((await one(`select count(*) c from profiles`)).c) === 2, 'المستخدمين متلمسوش')
+ok(Number((await one(`select count(*) c from notifications where type='backup.restore'`)).c) === 1, 'إشعار الاسترجاع وصل للأدمن')
+// نسخة قديمة ناقصها أعمدة اتضافت بعدين → بتاخد القيمة الافتراضية
+const old = JSON.parse(JSON.stringify(bk))
+old.tables.invoice_items.forEach((r) => delete r.returned_qty)
+await one(`select restore_backup($1)`, [JSON.stringify(old)])
+ok(Number((await one(`select count(*) c from invoice_items where returned_qty = 0`)).c) > 0, 'نسخة قديمة اتسترجعت عادي')
+await expectErr(() => one(`select restore_backup($1)`, [JSON.stringify({ app: 'x', tables: {} })]), 'ملف غلط ميتسترجعش')
+const ret2 = await one(`select count(*) c from sales_returns`)
+ok(Number(ret2.c) === 1 && counts.sales_returns === 1, 'المرتجعات رجعت مع النسخة')
 
 const notes = await one(`select count(*) c from notifications`)
 const audit = await one(`select count(*) c from audit_log`)

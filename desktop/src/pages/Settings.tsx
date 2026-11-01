@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
-import { Settings as Cog, Building2, Clock, DatabaseBackup, ScrollText, ImagePlus, Download, Unplug } from 'lucide-react'
+import { Settings as Cog, Building2, Clock, DatabaseBackup, ScrollText, ImagePlus, Download, Unplug, Upload, History, FolderOpen } from 'lucide-react'
 import { useApp, useLoad, useAction } from '../lib/app'
 import { PageHeader, Field, Tabs, Loading, Badge, Empty, useConfirm, NoAccess } from '../components/ui'
 import { saveConn } from '../lib/backend'
-import { dateTime } from '../lib/format'
+import { makeBackup, lastAutoBackup } from '../lib/backup'
 
 const TABLES = ['settings', 'profiles', 'categories', 'products', 'stock_movements', 'customers', 'suppliers', 'purchases', 'purchase_items',
-  'invoices', 'invoice_items', 'delivery_permits', 'delivery_items', 'payments', 'expense_categories', 'expenses', 'exchange_rates',
-  'employees', 'attendance', 'salary_advances', 'salary_deductions', 'payrolls', 'shareholders', 'shareholder_terms', 'shareholder_payouts', 'doc_counters']
+  'invoices', 'invoice_items', 'sales_returns', 'delivery_permits', 'delivery_items', 'payments', 'expense_categories', 'expenses', 'exchange_rates',
+  'employees', 'attendance', 'salary_advances', 'salary_deductions', 'payrolls', 'shareholders', 'shareholder_terms', 'shareholder_payouts', 'backup']
+import { dateTime } from '../lib/format'
+
 
 const ACTION: Record<string, { label: string; cls: string }> = {
   insert: { label: 'إضافة', cls: 'bg-emerald-500/15 text-emerald-300' },
@@ -102,32 +104,65 @@ function Backup() {
   const { db, isAdmin, toast } = useApp()
   const [busy, setBusy] = useState('')
   const confirm = useConfirm()
+  const w = (window as any).wali
+  const last = lastAutoBackup()
   const exportAll = async () => {
-    const out: Record<string, any[]> = {}
-    for (const t of TABLES) {
-      setBusy(`بنصدّر ${t}...`)
-      try { out[t] = await db.list(t) } catch { out[t] = [] }
-    }
-    setBusy('')
-    const name = `wali-core-backup-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`
-    const json = JSON.stringify({ app: 'wali-core', version: 1, created_at: new Date().toISOString(), tables: out })
-    const w = (window as any).wali
-    if (w?.saveFile) {
-      const p = await w.saveFile(name, json)
-      if (p) toast('النسخة اتحفظت في: ' + p)
-    } else {
-      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' })); a.download = name; a.click()
-      toast('النسخة اتنزلت')
-    }
+    setBusy('بنجهّز النسخة...')
+    try {
+      const { name, json } = await makeBackup(db)
+      if (w?.saveFile) {
+        const p = await w.saveFile(name, json)
+        if (p) toast('النسخة اتحفظت في: ' + p)
+      } else {
+        const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' })); a.download = name; a.click()
+        toast('النسخة اتنزلت')
+      }
+    } catch (e: any) { toast(e.message, 'err') } finally { setBusy('') }
+  }
+  const restore = async (file: File) => {
+    let p: any
+    try { p = JSON.parse(await file.text()) } catch { return toast('الملف ده مش نسخة احتياطية', 'err') }
+    if (p?.app !== 'wali-core' || !p.tables) return toast('الملف ده مش نسخة احتياطية من WALI CORE', 'err')
+    const ok = await confirm.ask('استرجاع النسخة الاحتياطية؟', {
+      danger: true,
+      text: `كل البيانات الحالية (أصناف، فواتير، حسابات، موظفين...) هتتمسح وتتبدل بالنسخة دي: ${dateTime(p.created_at)} — ${p.tables.invoices?.length ?? 0} فاتورة و${p.tables.products?.length ?? 0} صنف. المستخدمين وكلمات السر مش هيتغيروا. هنحفظ نسخة من الوضع الحالي الأول.`,
+    })
+    if (!ok) return
+    try {
+      setBusy('بنحفظ نسخة من الوضع الحالي...')
+      const cur = await makeBackup(db, 'before-restore')
+      if (w?.autoBackup) await w.autoBackup(cur.name, cur.json)
+      else { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([cur.json], { type: 'application/json' })); a.download = cur.name; a.click() }
+      setBusy('بنسترجع...')
+      await db.rpc('restore_backup', { p })
+      toast('النسخة اتسترجعت')
+      setTimeout(() => location.reload(), 800)
+    } catch (e: any) { toast(e.message, 'err') } finally { setBusy('') }
   }
   return (
     <div className="max-w-3xl space-y-4">
       <div className="card p-6">
         <div className="font-bold text-lg flex items-center gap-2"><DatabaseBackup size={20} className="text-brand-500" /> نسخة احتياطية كاملة</div>
         <p className="text-sm text-zinc-400 mt-2 leading-7">بيصدّر كل البيانات (الأصناف، الفواتير، الحسابات، الموظفين، المساهمين...) في ملف واحد. احفظه على فلاشة أو على D بعيد عن البرنامج.</p>
-        <button className="btn-primary mt-4" disabled={!!busy || !isAdmin} onClick={exportAll}><Download size={17} /> {busy || 'صدّر نسخة دلوقتي'}</button>
+        <div className="flex gap-2 mt-4 flex-wrap">
+          <button className="btn-primary" disabled={!!busy || !isAdmin} onClick={exportAll}><Download size={17} /> {busy || 'صدّر نسخة دلوقتي'}</button>
+          {isAdmin && <label className={`btn-ghost cursor-pointer ${busy ? 'pointer-events-none opacity-50' : ''}`}>
+            <Upload size={17} /> استرجاع نسخة
+            <input type="file" accept=".json,application/json" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) restore(f) }} />
+          </label>}
+        </div>
         {!isAdmin && <p className="text-[12px] text-zinc-500 mt-2">النسخ الاحتياطي للأدمن بس.</p>}
       </div>
+      {isAdmin && w?.autoBackup && (
+        <div className="card p-6">
+          <div className="font-bold flex items-center gap-2"><History size={18} className="text-brand-500" /> نسخة تلقائية كل يوم</div>
+          <p className="text-sm text-zinc-400 mt-2 leading-7">أول ما الأدمن يفتح البرنامج كل يوم، بتتعمل نسخة لوحدها في <span dir="ltr" className="num">D:\WaliCore\Backups\auto</span>، وبنحتفظ بآخر 30 يوم.</p>
+          <div className="flex items-center gap-3 mt-4">
+            <button className="btn-ghost" onClick={() => w.openBackups()}><FolderOpen size={17} /> افتح الفولدر</button>
+            <span className="text-sm text-zinc-500">{last ? `آخر نسخة: ${last}` : 'لسه مفيش نسخ'}</span>
+          </div>
+        </div>
+      )}
       <div className="card p-6">
         <div className="font-bold flex items-center gap-2"><Unplug size={18} className="text-zinc-400" /> قاعدة البيانات</div>
         <p className="text-sm text-zinc-400 mt-2">لو عايز تربط الجهاز ده بقاعدة بيانات تانية (أو تخرج من وضع التجربة).</p>

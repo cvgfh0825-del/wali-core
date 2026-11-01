@@ -47,7 +47,7 @@ export default function Reports() {
       {tab === 'annual' && (rep.loading || !r ? <Loading /> : (
         <div className="space-y-5">
           <div className="grid grid-cols-4 gap-4">
-            <Stat label="المبيعات" value={short(r.sales)} sub={`خصومات ${short(r.discounts)}`} icon={<TrendingUp size={20} />} />
+            <Stat label="المبيعات" value={short(r.sales)} sub={`خصومات ${short(r.discounts)}${r.returns ? ` · مرتجعات ${short(r.returns)}` : ''}`} icon={<TrendingUp size={20} />} />
             <Stat label="مجمل الربح" value={short(r.gross_profit)} sub={`بعد تكلفة البضاعة ${short(r.cogs)}`} icon={<Coins size={20} />} tone="green" />
             <Stat label="المصروفات" value={short(r.expenses)} sub="شاملة المرتبات والمساهمات الاجتماعية" icon={<Receipt size={20} />} tone="red" />
             <Stat accent label={`صافي ربح ${year}`} value={short(r.net_profit)} sub={`هامش ${r.sales ? num((r.net_profit / r.sales) * 100, 1) : 0}%`} icon={<PieChart size={20} />} />

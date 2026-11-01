@@ -52,14 +52,14 @@ export default function Dashboard() {
         <>
           {d.limited ? (
           <div className="grid grid-cols-4 gap-4">
-            <Stat accent label="مبيعاتك" value={short(d.sales)} sub={`${d.sales_count} فاتورة نهائية`} icon={<TrendingUp size={20} />} />
+            <Stat accent label="مبيعاتك" value={short(d.sales)} sub={`${d.sales_count} فاتورة نهائية${d.returns ? ` · مرتجع ${short(d.returns)}` : ''}`} icon={<TrendingUp size={20} />} />
             <Stat label="مبدئيات مفتوحة في المعرض" value={d.open_proformas} icon={<FileClock size={20} />} tone="amber" />
             <Stat label="أصناف قربت تخلص" value={d.low_stock} icon={<AlertTriangle size={20} />} tone={d.low_stock ? 'red' : 'green'} />
             <Stat label="الأصناف المتاحة" value={d.products_count} sub={`${qty(d.stock_units)} قطعة`} icon={<Package size={20} />} />
           </div>
           ) : (
           <div className="grid grid-cols-4 gap-4">
-            <Stat accent label="المبيعات" value={short(d.sales)} sub={`${d.sales_count} فاتورة نهائية`} icon={<TrendingUp size={20} />} />
+            <Stat accent label="المبيعات" value={short(d.sales)} sub={`${d.sales_count} فاتورة نهائية${d.returns ? ` · مرتجع ${short(d.returns)}` : ''}`} icon={<TrendingUp size={20} />} />
             <Stat label="صافي الربح التقريبي" value={short(profit)} sub="المبيعات − التكلفة − المصروفات" icon={<Coins size={20} />} tone={profit >= 0 ? 'green' : 'red'} />
             <Stat label="قيمة المخزون" value={short(d.stock_value_sdg)} sub={`${qty(d.stock_units)} قطعة · ${d.products_count} صنف`} icon={<Package size={20} />} />
             <Stat label="مستحقات على العملاء" value={short(d.receivables)} sub={`علينا للموردين ${short(d.payables)}`} icon={<HandCoins size={20} />} tone="amber" />

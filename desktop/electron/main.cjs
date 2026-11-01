@@ -81,6 +81,22 @@ ipcMain.handle('save-file', async (_e, name, content) => {
   return filePath
 })
 
+// نسخة تلقائية كل يوم من غير ما نسأل، وبنحتفظ بآخر 30 نسخة بس
+const autoDir = () => path.join(defaultDir(), 'Backups', 'auto')
+ipcMain.handle('auto-backup', async (_e, name, content) => {
+  const dir = autoDir()
+  fs.mkdirSync(dir, { recursive: true })
+  const file = path.join(dir, path.basename(name))
+  fs.writeFileSync(file, content, 'utf8')
+  const old = fs.readdirSync(dir).filter((f) => f.endsWith('.json')).sort().reverse().slice(30)
+  for (const f of old) fs.rmSync(path.join(dir, f), { force: true })
+  return file
+})
+ipcMain.handle('open-backups', async () => {
+  fs.mkdirSync(autoDir(), { recursive: true })
+  return shell.openPath(autoDir())
+})
+
 app.whenReady().then(() => {
   protocol.handle('app', (req) => {
     const rel = decodeURIComponent(new URL(req.url).pathname).replace(/^\/+/, '') || 'index.html'

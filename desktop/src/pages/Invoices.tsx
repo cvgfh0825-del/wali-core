@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { FileText, Printer, FileDown, ArrowLeftRight, Pencil, Ban, HandCoins, Truck, Plus, Download } from 'lucide-react'
+import { FileText, Printer, FileDown, ArrowLeftRight, Pencil, Ban, HandCoins, Truck, Plus, Download, Undo2 } from 'lucide-react'
 import { useApp, useLoad, useAction } from '../lib/app'
 import { PageHeader, SearchBox, Tabs, Money, Badge, Empty, Loading, Modal, Field, useConfirm, Segmented, NoAccess } from '../components/ui'
 import { printDoc, InvoiceDoc } from '../components/Print'
@@ -97,17 +97,22 @@ export function InvoiceDrawer({ id, onClose, onOpen }: { id: string; onClose: ()
   const confirm = useConfirm()
   const [convert, setConvert] = useState(false)
   const [collect, setCollect] = useState(false)
+  const [giveBack, setGiveBack] = useState(false)
   const { data, reload } = useLoad(async () => {
-    const [inv, items, pays, permits] = await Promise.all([
+    const [inv, items, pays, permits, returns] = await Promise.all([
       db.get('v_invoices', id),
       db.list('invoice_items', { eq: { invoice_id: id }, order: [{ col: 'sort' }] }),
       can('accounting') || can('sales') ? db.list('v_payments', { eq: { invoice_id: id }, order: [{ col: 'created_at' }] }).catch(() => []) : Promise.resolve([]),
       can('delivery') ? db.list('v_delivery_permits', { eq: { invoice_id: id }, order: [{ col: 'created_at' }] }).catch(() => []) : Promise.resolve([]),
+      db.list('v_sales_returns', { eq: { invoice_id: id }, order: [{ col: 'created_at' }] }).catch(() => []),
     ])
-    return { inv, items, pays, permits }
-  }, [id], ['invoices', 'payments', 'delivery_permits'])
+    return { inv, items, pays, permits, returns }
+  }, [id], ['invoices', 'payments', 'delivery_permits', 'sales_returns'])
 
   const inv = data?.inv
+  const returned = Number(inv?.returned_sdg ?? 0)
+  const canReturn = inv?.kind === 'final' && inv?.status === 'posted' && can('sales', 'cancel')
+    && (data?.items ?? []).some((i: any) => Number(i.qty) > Number(i.returned_qty ?? 0))
   const print = (pdf = false) => inv && printDoc(<InvoiceDoc inv={inv} items={data!.items} settings={settings} />, pdf ? { pdf: inv.number } : {})
 
   const cancel = async () => {
@@ -129,7 +134,8 @@ export function InvoiceDrawer({ id, onClose, onOpen }: { id: string; onClose: ()
         {can('sales', 'print') && <button className="btn-ghost" onClick={() => print()}><Printer size={17} /> طباعة</button>}
         {can('sales', 'print') && (window as any).wali && <button className="btn-ghost" onClick={() => print(true)}><FileDown size={17} /> PDF</button>}
         <div className="flex-1" />
-        {inv.status !== 'cancelled' && inv.status !== 'converted' && can('sales', 'cancel') && <button className="btn-danger" onClick={cancel}><Ban size={17} /> إلغاء</button>}
+        {inv.status !== 'cancelled' && inv.status !== 'converted' && !returned && can('sales', 'cancel') && <button className="btn-danger" onClick={cancel}><Ban size={17} /> إلغاء</button>}
+        {canReturn && <button className="btn-ghost" onClick={() => setGiveBack(true)}><Undo2 size={17} /> مرتجع</button>}
         {inv.kind === 'proforma' && inv.status === 'open' && can('sales', 'edit') && <button className="btn-ghost" onClick={() => nav(`/sales/${inv.id}`)}><Pencil size={17} /> تعديل</button>}
         {inv.kind === 'final' && inv.status === 'posted' && Number(inv.undelivered_qty) > 0 && can('delivery', 'create') && <button className="btn-ghost" disabled={busy} onClick={delivery}><Truck size={17} /> إذن تسليم</button>}
         {inv.kind === 'final' && inv.status === 'posted' && Number(inv.remaining_sdg) > 0 && can('accounting', 'create') && <button className="btn-primary" onClick={() => setCollect(true)}><HandCoins size={17} /> تحصيل</button>}
@@ -140,7 +146,8 @@ export function InvoiceDrawer({ id, onClose, onOpen }: { id: string; onClose: ()
           <div className="grid grid-cols-4 gap-3">
             <Info label="العميل" value={inv.customer_name ?? 'عميل نقدي'} sub={inv.customer_phone} />
             <Info label="سعر الصرف" value={<span className="num">{num(inv.rate, 2)}</span>} sub="ج.س للدولار" />
-            <Info label="الإجمالي" value={<Money v={inv.total_sdg} />} sub={Number(inv.discount_sdg) ? `بعد خصم ${sdg(inv.discount_sdg)}` : undefined} />
+            <Info label="الإجمالي" value={<Money v={Number(inv.total_sdg) - returned} />}
+              sub={[Number(inv.discount_sdg) ? `بعد خصم ${sdg(inv.discount_sdg)}` : '', returned ? `مرتجع ${sdg(returned)}` : ''].filter(Boolean).join(' · ') || undefined} />
             {inv.kind === 'final' ? <Info label="المتبقي" value={<Money v={inv.remaining_sdg} className={Number(inv.remaining_sdg) > 0 ? 'text-red-300' : 'text-emerald-300'} />} sub={`اتدفع ${sdg(inv.paid_sdg)}`} />
               : <Info label="بالأسعار الحالية" value={rate ? <span className="num text-brand-300">{sdg(data.items.reduce((s: number, i: any) => s + Number(i.unit_price_usd) * rate * Number(i.qty), 0) - Number(inv.discount_sdg))}</span> : '—'} sub="لو اتحولت النهارده" />}
           </div>
@@ -150,15 +157,19 @@ export function InvoiceDrawer({ id, onClose, onOpen }: { id: string; onClose: ()
 
           <div className="rounded-xl border border-ink-700 overflow-hidden">
             <table className="tbl">
-              <thead><tr><th>الكود</th><th>الصنف</th><th>الموديل</th><th>الكمية</th><th>السعر $</th><th>السعر ج.س</th><th>الإجمالي</th>{inv.kind === 'final' && <th>اتسلّم</th>}</tr></thead>
-              <tbody>{data.items.map((i: any) => (
-                <tr key={i.id}>
-                  <td className="num text-zinc-400">{i.code}</td><td className="font-semibold">{i.name}</td><td className="text-zinc-400" dir="ltr">{i.model}</td>
-                  <td className="num">{qty(i.qty)}</td><td className="num text-zinc-400">{usd(i.unit_price_usd)}</td>
-                  <td><Money v={i.unit_price_sdg} cur={false} /></td><td><Money v={i.total_sdg} className="font-bold" /></td>
-                  {inv.kind === 'final' && <td className={`num ${Number(i.delivered_qty) >= Number(i.qty) ? 'text-emerald-300' : 'text-amber-300'}`}>{qty(i.delivered_qty)} / {qty(i.qty)}</td>}
-                </tr>
-              ))}</tbody>
+              <thead><tr><th>الكود</th><th>الصنف</th><th>الموديل</th><th>الكمية</th><th>السعر $</th><th>السعر ج.س</th><th>الإجمالي</th>{inv.kind === 'final' && <th>اتسلّم</th>}{returned > 0 && <th>رجع</th>}</tr></thead>
+              <tbody>{data.items.map((i: any) => {
+                const net = Number(i.qty) - Number(i.returned_qty ?? 0)
+                return (
+                  <tr key={i.id}>
+                    <td className="num text-zinc-400">{i.code}</td><td className="font-semibold">{i.name}</td><td className="text-zinc-400" dir="ltr">{i.model}</td>
+                    <td className="num">{qty(i.qty)}</td><td className="num text-zinc-400">{usd(i.unit_price_usd)}</td>
+                    <td><Money v={i.unit_price_sdg} cur={false} /></td><td><Money v={i.total_sdg} className="font-bold" /></td>
+                    {inv.kind === 'final' && <td className={`num ${Number(i.delivered_qty) >= net ? 'text-emerald-300' : 'text-amber-300'}`}>{qty(i.delivered_qty)} / {qty(net)}</td>}
+                    {returned > 0 && <td className="num text-red-300">{Number(i.returned_qty) ? qty(i.returned_qty) : ''}</td>}
+                  </tr>
+                )
+              })}</tbody>
             </table>
           </div>
 
@@ -183,10 +194,22 @@ export function InvoiceDrawer({ id, onClose, onOpen }: { id: string; onClose: ()
               </div>}
             </div>
           )}
+          {data.returns.length > 0 && <div>
+            <div className="font-bold text-sm mb-2">المرتجعات</div>
+            {data.returns.map((r: any) => (
+              <div key={r.id} className="flex items-center gap-3 text-sm py-2 border-b border-ink-700">
+                <span className="num" dir="ltr">{r.number}</span>
+                <span className="text-zinc-400">{date(r.return_date)} · {qty(r.total_qty)} قطعة · {r.reason}</span>
+                {Number(r.refund_sdg) > 0 && <Badge cls="bg-red-500/15 text-red-300">اترد {sdg(r.refund_sdg)}</Badge>}
+                <Money v={r.total_sdg} className="mr-auto text-red-300" />
+              </div>
+            ))}
+          </div>}
           {inv.notes && <div className="text-sm text-zinc-400">ملاحظات: {inv.notes}</div>}
         </div>
       )}
       {confirm.node}
+      {inv && data && <ReturnModal open={giveBack} inv={inv} items={data.items} onClose={() => setGiveBack(false)} onDone={() => { setGiveBack(false); reload() }} />}
       {inv && <ConvertModal open={convert} inv={inv} onClose={() => setConvert(false)} onDone={(fid) => { setConvert(false); onOpen(fid) }} />}
       {inv && <CollectModal open={collect} inv={inv} onClose={() => setCollect(false)} onDone={() => { setCollect(false); reload() }} />}
     </Modal>
@@ -230,6 +253,55 @@ function ConvertModal({ open, inv, onClose, onDone }: { open: boolean; inv: Row;
           </label>
         )}
         <button className="btn-primary w-full" disabled={busy} onClick={go}>تأكيد التحويل</button>
+      </div>
+    </Modal>
+  )
+}
+
+// مرتجع جزئي: تختار الكمية الراجعة من كل صنف
+function ReturnModal({ open, inv, items, onClose, onDone }: { open: boolean; inv: Row; items: Row[]; onClose: () => void; onDone: () => void }) {
+  const { db } = useApp()
+  const { busy, run } = useAction()
+  const [q, setQ] = useState<Record<string, string>>({})
+  const [reason, setReason] = useState('')
+  useEffect(() => { if (open) { setQ({}); setReason('') } }, [open])
+  const left = (i: Row) => Number(i.qty) - Number(i.returned_qty ?? 0)
+  const discRatio = Number(inv.subtotal_sdg) > 0 ? Number(inv.discount_sdg) / Number(inv.subtotal_sdg) : 0
+  const value = items.reduce((s, i) => s + Number(i.unit_price_sdg) * (Number(q[i.id]) || 0), 0) * (1 - discRatio)
+  const remainingAfter = Number(inv.total_sdg) - Number(inv.returned_sdg ?? 0) - value
+  const refund = Math.max(0, Number(inv.paid_sdg) - remainingAfter)
+  const go = async () => {
+    const p_items = items.filter((i) => Number(q[i.id]) > 0).map((i) => ({ invoice_item_id: i.id, qty: Number(q[i.id]) }))
+    const r = await run(() => db.rpc('create_sales_return', { p_invoice: inv.id, p_items: p_items, p_reason: reason }), 'المرتجع اتسجل والبضاعة رجعت المخزن')
+    if (r) onDone()
+  }
+  return (
+    <Modal open={open} onClose={onClose} width="max-w-2xl" title={`مرتجع من ${inv.number}`} subtitle="اكتب الكمية الراجعة من كل صنف، والبضاعة هترجع المخزن">
+      <div className="space-y-4">
+        <div className="rounded-xl border border-ink-700 overflow-hidden">
+          <table className="tbl">
+            <thead><tr><th>الصنف</th><th>المباع</th><th>رجع قبل كده</th><th>السعر</th><th className="w-32">الكمية الراجعة</th></tr></thead>
+            <tbody>{items.map((i) => (
+              <tr key={i.id}>
+                <td className="font-semibold">{i.name} <span className="num text-zinc-500 text-xs">{i.code}</span></td>
+                <td className="num">{qty(i.qty)}</td>
+                <td className="num text-zinc-400">{Number(i.returned_qty) ? qty(i.returned_qty) : '—'}</td>
+                <td><Money v={i.unit_price_sdg} cur={false} /></td>
+                <td>{left(i) > 0
+                  ? <input className="input h-9 num" placeholder={`حتى ${qty(left(i))}`} value={q[i.id] ?? ''}
+                      onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ''); setQ({ ...q, [i.id]: Number(v) > left(i) ? String(left(i)) : v }) }} />
+                  : <span className="text-zinc-500 text-sm">رجع كله</span>}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+        <Field label="سبب المرتجع"><input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="مثلاً: عيب في الصنف" /></Field>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-xl bg-ink-900 border border-ink-700 p-3"><div className="text-[12px] text-zinc-500">قيمة المرتجع</div><Money v={value} className="font-bold text-red-300" /></div>
+          <div className="rounded-xl bg-ink-900 border border-ink-700 p-3"><div className="text-[12px] text-zinc-500">هيترد للعميل كاش</div><Money v={refund} className="font-bold" /></div>
+        </div>
+        {Number(inv.discount_sdg) > 0 && <div className="text-xs text-zinc-500">القيمة محسوبة بعد نصيب الأصناف من خصم الفاتورة.</div>}
+        <button className="btn-primary w-full" disabled={busy || value <= 0 || !reason.trim()} onClick={go}>تأكيد المرتجع</button>
       </div>
     </Modal>
   )

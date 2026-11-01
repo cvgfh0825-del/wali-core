@@ -163,7 +163,7 @@ const kv = {
   },
 }
 // دوال القراءة بس — مبتغيرش حاجة، فمش لازم تنبّه الشاشات تعيد التحميل
-const READ_ONLY_RPC = new Set(['current_rate', 'latest_rate', 'has_perm', 'is_admin', 'dashboard', 'annual_report', 'my_employee', 'shareholder_terms_at', 'period_sales'])
+const READ_ONLY_RPC = new Set(['current_rate', 'latest_rate', 'has_perm', 'is_admin', 'dashboard', 'annual_report', 'my_employee', 'shareholder_terms_at', 'period_sales', 'export_backup'])
 
 const ident = (s: string) => {
   if (!/^[a-z_][a-z0-9_]*$/.test(s)) throw new Error('اسم غير صالح: ' + s)
@@ -190,6 +190,9 @@ export class DemoBackend implements Backend {
       const { setupDemo } = await import('../demo/seed')
       await setupDemo(self.db, onProgress)
       await self.persist()
+    } else {
+      const { upgradeDemo } = await import('../demo/seed')
+      if (await upgradeDemo(self.db)) await self.persist()
     }
     return self
   }

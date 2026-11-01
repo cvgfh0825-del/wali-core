@@ -13,6 +13,8 @@ const KIND: Record<string, { label: string; cls: string }> = {
   adjust_in: { label: 'تسوية +', cls: 'bg-violet-500/15 text-violet-300' },
   adjust_out: { label: 'تسوية −', cls: 'bg-red-500/15 text-red-300' },
   opening: { label: 'رصيد افتتاحي', cls: 'bg-zinc-500/15 text-zinc-300' },
+  return_in: { label: 'مرتجع بيع', cls: 'bg-amber-500/15 text-amber-300' },
+  purchase_cancel: { label: 'إلغاء مشتريات', cls: 'bg-red-500/15 text-red-300' },
 }
 
 export default function Stock() {

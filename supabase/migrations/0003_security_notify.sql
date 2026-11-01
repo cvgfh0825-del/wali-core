@@ -53,6 +53,18 @@ begin
       v_body := coalesce(v_tmp, 'بدون مورد') || ' — ' || fmt((n ->> 'total_sdg')::numeric) || ' ج.س';
     elsif (n ->> 'status') is distinct from (o ->> 'status') then
       v_title := 'إلغاء مشتريات ' || (n ->> 'number'); v_level := 'danger';
+      v_body := 'السبب: ' || coalesce(n ->> 'cancel_reason', '—');
+    else return null; end if;
+
+  -- المرتجع بيتسجل بصفر الأول وبعدين بيتحدّث بقيمته، فالإشعار مع التحديث
+  when 'sales_returns' then
+    if tg_op = 'UPDATE' and coalesce((o ->> 'total_sdg')::numeric, 0) = 0 and (n ->> 'total_sdg')::numeric > 0 then
+      select number into v_tmp from invoices where id = (n ->> 'invoice_id')::uuid;
+      v_title := 'مرتجع ' || (n ->> 'number') || ' من فاتورة ' || coalesce(v_tmp, '');
+      v_body := fmt((n ->> 'total_sdg')::numeric) || ' ج.س'
+             || case when (n ->> 'refund_sdg')::numeric > 0 then ' — اترد للعميل ' || fmt((n ->> 'refund_sdg')::numeric) else '' end
+             || ' — السبب: ' || (n ->> 'reason');
+      v_level := 'warning';
     else return null; end if;
 
   when 'products' then

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ShoppingBag, Plus, Trash2, Ship, Landmark, Calculator, HandCoins } from 'lucide-react'
+import { ShoppingBag, Plus, Trash2, Ship, Landmark, Calculator, HandCoins, Ban } from 'lucide-react'
 import { useApp, useLoad, useAction } from '../lib/app'
-import { PageHeader, SearchBox, Money, Empty, Loading, Modal, Field, Badge, NoAccess } from '../components/ui'
+import { PageHeader, SearchBox, Money, Empty, Loading, Modal, Field, Badge, NoAccess, useConfirm } from '../components/ui'
 import { date, usd, num, qty, sdg, dateTime } from '../lib/format'
 import type { Row } from '../lib/backend'
 
@@ -29,12 +29,12 @@ export default function Purchases() {
           <table className="tbl">
             <thead><tr><th>الرقم</th><th>التاريخ</th><th>المورد</th><th>البضاعة $</th><th>الريت</th><th>شحن + جمارك + رسوم</th><th>الإجمالي</th><th>المدفوع</th><th>المتبقي</th></tr></thead>
             <tbody>{data.map((r: any) => (
-              <tr key={r.id} className="cursor-pointer" onClick={() => setOpen(r)}>
+              <tr key={r.id} className={`cursor-pointer ${r.status === 'cancelled' ? 'opacity-50' : ''}`} onClick={() => setOpen(r)}>
                 <td className="num font-semibold" dir="ltr">{r.number}</td><td className="text-zinc-400">{date(r.purchase_date)}</td><td>{r.supplier_name ?? '—'}</td>
                 <td className="num">{usd(r.goods_usd)}</td><td className="num text-zinc-400">{num(r.rate, 2)}</td>
                 <td><Money v={Number(r.shipping_sdg) + Number(r.customs_sdg) + Number(r.other_sdg)} cur={false} className="text-zinc-400" /></td>
                 <td><Money v={r.total_sdg} className="font-bold" /></td><td><Money v={r.paid_sdg} cur={false} /></td>
-                <td>{Number(r.remaining_sdg) > 0 ? <Money v={r.remaining_sdg} className="text-red-300" /> : <Badge cls="bg-emerald-500/15 text-emerald-300">خالص</Badge>}</td>
+                <td>{r.status === 'cancelled' ? <Badge cls="bg-red-500/15 text-red-300">ملغية</Badge> : Number(r.remaining_sdg) > 0 ? <Money v={r.remaining_sdg} className="text-red-300" /> : <Badge cls="bg-emerald-500/15 text-emerald-300">خالص</Badge>}</td>
               </tr>
             ))}</tbody>
           </table>
@@ -141,6 +141,7 @@ function NewPurchase({ onClose }: { onClose: () => void }) {
 function PurchaseView({ p, onClose }: { p: Row; onClose: () => void }) {
   const { db, can } = useApp()
   const { busy, run } = useAction()
+  const confirm = useConfirm()
   const [amt, setAmt] = useState('')
   const { data, reload } = useLoad(async () => {
     const [items, prods, pays] = await Promise.all([
@@ -151,10 +152,21 @@ function PurchaseView({ p, onClose }: { p: Row; onClose: () => void }) {
     const pm = Object.fromEntries(prods.map((x: any) => [x.id, x]))
     return { items: items.map((i: any) => ({ ...i, ...pm[i.product_id], id: i.id })), pays }
   }, [p.id], ['payments'])
-  const fresh = useLoad(() => db.get('v_purchases', p.id), [p.id], ['payments'])
+  const fresh = useLoad(() => db.get('v_purchases', p.id), [p.id], ['payments', 'purchases'])
   const cur = fresh.data ?? p
+  const cancel = async () => {
+    const reason = await confirm.ask(`إلغاء فاتورة المشتريات ${p.number}؟`, {
+      danger: true, reason: true,
+      text: 'البضاعة هتخرج من المخزن والتكلفة هترجع زي ما كانت، ولو اتدفع للمورد حاجة هتتسجل استرداد. مينفعش تتلغي لو اتباع منها.',
+    })
+    if (reason && await run(() => db.rpc('cancel_purchase', { p_id: p.id, p_reason: reason }), 'فاتورة المشتريات اتلغت')) fresh.reload()
+  }
   return (
-    <Modal open onClose={onClose} width="max-w-4xl" title={<span className="num" dir="ltr">{p.number}</span>} subtitle={`${p.supplier_name ?? ''} · ${dateTime(p.created_at)} · بواسطة ${p.created_by_name ?? ''}`}>
+    <Modal open onClose={onClose} width="max-w-4xl"
+      title={<span className="flex items-center gap-3"><span className="num" dir="ltr">{p.number}</span>{cur.status === 'cancelled' && <Badge cls="bg-red-500/15 text-red-300">ملغية</Badge>}</span>}
+      subtitle={`${p.supplier_name ?? ''} · ${dateTime(p.created_at)} · بواسطة ${p.created_by_name ?? ''}`}
+      footer={cur.status === 'posted' && can('purchases', 'cancel') ? <button className="btn-danger" disabled={busy} onClick={cancel}><Ban size={17} /> إلغاء الفاتورة</button> : undefined}>
+      {cur.cancel_reason && <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200 mb-4">سبب الإلغاء: {cur.cancel_reason}</div>}
       <div className="grid grid-cols-4 gap-3 mb-4">
         {[['البضاعة', usd(cur.goods_usd)], ['الريت', num(cur.rate, 2)], ['الشحن', sdg(cur.shipping_sdg)], ['الجمارك + رسوم', sdg(Number(cur.customs_sdg) + Number(cur.other_sdg))]].map(([a, b]) => (
           <div key={a} className="rounded-xl bg-ink-900 border border-ink-700 p-3"><div className="text-[12px] text-zinc-500">{a}</div><div className="num font-bold mt-1">{b}</div></div>
@@ -168,7 +180,7 @@ function PurchaseView({ p, onClose }: { p: Row; onClose: () => void }) {
       </table>
       <div className="flex items-center justify-between rounded-xl bg-ink-900 border border-ink-700 p-4">
         <div className="text-sm">الإجمالي <Money v={cur.total_sdg} className="font-bold" /> · اتدفع <Money v={cur.paid_sdg} /> · <span className="text-red-300">متبقي <Money v={cur.remaining_sdg} /></span></div>
-        {Number(cur.remaining_sdg) > 0 && can('accounting', 'create') && (
+        {cur.status === 'posted' && Number(cur.remaining_sdg) > 0 && can('accounting', 'create') && (
           <div className="flex gap-2">
             <input className="input h-10 w-40 num" placeholder="مبلغ" value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ''))} />
             <button className="btn-primary h-10" disabled={busy || !(Number(amt) > 0)} onClick={async () => {
@@ -178,6 +190,7 @@ function PurchaseView({ p, onClose }: { p: Row; onClose: () => void }) {
           </div>
         )}
       </div>
+      {confirm.node}
     </Modal>
   )
 }

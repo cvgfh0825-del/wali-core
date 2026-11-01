@@ -59,6 +59,13 @@ export function AppProvider({ db, me, onSignOut, children }: { db: Backend; me: 
     (m: string, a = 'view') => isAdmin || (me.permissions?.[m] ?? []).includes(a),
     [isAdmin, me.permissions])
 
+  // نسخة احتياطية تلقائية مرة في اليوم (بعد ما البرنامج يفتح بشوية عشان ميبطّأش الدخول)
+  useEffect(() => {
+    if (!isAdmin) return
+    const t = setTimeout(() => import('./backup').then((m) => m.autoBackupIfDue(db)), 8000)
+    return () => clearTimeout(t)
+  }, [db, isAdmin])
+
   if (!ready) return null
   return (
     <AppCtx.Provider value={{ db, me, settings, rate, latestRate, can, isAdmin, reloadRate, reloadSettings, toast: push, signOut: onSignOut }}>
