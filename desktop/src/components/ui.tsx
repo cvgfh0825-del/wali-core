@@ -1,4 +1,5 @@
 import { ReactNode, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Search, Loader2, CheckCircle2, AlertTriangle, Info } from 'lucide-react'
 import { useToasts } from '../lib/app'
 import { sdg } from '../lib/format'
@@ -40,7 +41,8 @@ export function Modal({ open, onClose, title, subtitle, children, width = 'max-w
     return () => window.removeEventListener('keydown', k)
   }, [open, onClose])
   if (!open) return null
-  return (
+  // على مستوى الصفحة كلها، عشان الشريط العلوي (فيه blur) ميقصّش النافذة لو اتفتحت من جواه
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/70 backdrop-blur-sm animate-rise no-drag" onMouseDown={onClose}>
       <div className={`card w-full ${width} max-h-[90vh] flex flex-col overflow-hidden border-ink-600`} onMouseDown={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-4 border-b border-ink-700">
@@ -53,7 +55,8 @@ export function Modal({ open, onClose, title, subtitle, children, width = 'max-w
         <div className="p-6 overflow-auto">{children}</div>
         {footer && <div className="px-6 py-4 border-t border-ink-700 bg-ink-900/50 flex items-center justify-end gap-2">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -173,16 +176,16 @@ export function Toaster() {
 
 // نافذة تأكيد مع سبب اختياري
 export function useConfirm() {
-  const [state, setState] = useState<null | { title: string; text?: string; danger?: boolean; reason?: boolean; resolve: (v: string | false) => void }>(null)
+  const [state, setState] = useState<null | { title: string; text?: string; danger?: boolean; reason?: boolean; ok?: string; cancel?: string; resolve: (v: string | false) => void }>(null)
   const [reason, setReason] = useState('')
-  const ask = (title: string, opts: { text?: string; danger?: boolean; reason?: boolean } = {}) =>
+  const ask = (title: string, opts: { text?: string; danger?: boolean; reason?: boolean; ok?: string; cancel?: string } = {}) =>
     new Promise<string | false>((resolve) => { setReason(''); setState({ title, ...opts, resolve }) })
   const close = (v: string | false) => { state?.resolve(v); setState(null) }
   const node = (
     <Modal open={!!state} onClose={() => close(false)} title={state?.title} width="max-w-md"
       footer={<>
-        <button className="btn-ghost" onClick={() => close(false)}>رجوع</button>
-        <button className={state?.danger ? 'btn-danger' : 'btn-primary'} disabled={state?.reason && !reason.trim()} onClick={() => close(reason || 'ok')}>تأكيد</button>
+        <button className="btn-ghost" onClick={() => close(false)}>{state?.cancel ?? 'رجوع'}</button>
+        <button className={state?.danger ? 'btn-danger' : 'btn-primary'} disabled={state?.reason && !reason.trim()} onClick={() => close(reason || 'ok')}>{state?.ok ?? 'تأكيد'}</button>
       </>}>
       {state?.text && <p className="text-zinc-300 leading-7">{state.text}</p>}
       {state?.reason && <Field label="السبب" className="mt-4"><input className="input" autoFocus value={reason} onChange={(e) => setReason(e.target.value)} /></Field>}
