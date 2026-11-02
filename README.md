@@ -100,7 +100,7 @@ cd desktop && npm run test:db
 - Java مش بيتعامل مع اسم الفولدر العربي، فالبناء بيتم من حرف درايف مؤقت:
   ```bash
   subst W: "D:\سيستم والي بلازا"
-  cd W:dmin-app && npm run build && npx cap sync android
+  cd W:\admin-app && npm run build && npx cap sync android
   cp ../firebase/google-services.json android/app/
   cd android && set GRADLE_USER_HOME=W:\.cache\gradle && gradlew assembleRelease
   ```
