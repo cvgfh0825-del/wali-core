@@ -91,6 +91,23 @@ cd desktop && npm run test:db
 
 ---
 
+## تطبيق الأندرويد للأدمن
+
+نفس موقع الأدمن ملفوف في تطبيق أندرويد (Capacitor)، والإشعارات بتوصله من Firebase مباشرة حتى والتطبيق مقفول.
+
+- ملف التثبيت: `admin-app/release/WaliCore-Admin.apk`
+- مفاتيح Firebase ومفتاح توقيع التطبيق في فولدر `firebase/` (مش على GitHub). **متمسحوش `wali-admin.jks`** — من غيره التحديثات مش هتتسطّب فوق التطبيق القديم.
+- Java مش بيتعامل مع اسم الفولدر العربي، فالبناء بيتم من حرف درايف مؤقت:
+  ```bash
+  subst W: "D:\سيستم والي بلازا"
+  cd W:dmin-app && npm run build && npx cap sync android
+  cp ../firebase/google-services.json android/app/
+  cd android && set GRADLE_USER_HOME=W:\.cache\gradle && gradlew assembleRelease
+  ```
+- دالة `push-notify` محتاجة السر `FCM_SERVICE_ACCOUNT` (محتوى `firebase/service-account.json`).
+
+---
+
 ## حسابات وضع التجربة
 
 | الدور | الاسم | كلمة السر |

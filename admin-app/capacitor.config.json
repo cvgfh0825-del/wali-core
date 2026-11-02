@@ -1,0 +1,9 @@
+{
+  "appId": "com.waliplaza.admin",
+  "appName": "WALI CORE",
+  "webDir": "dist",
+  "android": { "backgroundColor": "#070708" },
+  "plugins": {
+    "PushNotifications": { "presentationOptions": ["badge", "sound", "alert"] }
+  }
+}

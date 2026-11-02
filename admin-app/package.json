@@ -9,14 +9,19 @@
     "icons": "node scripts/icons.mjs"
   },
   "dependencies": {
-    "@fontsource/ibm-plex-sans-arabic": "5.1.0",
+    "@capacitor/android": "6.2.1",
+    "@capacitor/app": "6.0.2",
+    "@capacitor/core": "6.2.1",
+    "@capacitor/push-notifications": "6.0.4",
     "@fontsource/cairo": "5.1.0",
+    "@fontsource/ibm-plex-sans-arabic": "5.1.0",
     "@supabase/supabase-js": "2.45.4",
     "lucide-react": "0.453.0",
     "react": "18.3.1",
     "react-dom": "18.3.1"
   },
   "devDependencies": {
+    "@capacitor/cli": "6.2.1",
     "@resvg/resvg-js": "2.6.2",
     "@types/react": "18.3.11",
     "@types/react-dom": "18.3.1",

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { Capacitor } from '@capacitor/core'
+import { PushNotifications } from '@capacitor/push-notifications'
 import {
   Bell, BellRing, LogOut, Share, PlusSquare, DollarSign, TrendingUp, FileClock, X, Loader2, FileText, Package, Wallet,
   Clock, ShieldAlert, Truck, PieChart, Users, CheckCheck, ChevronLeft, Smartphone, Download,
@@ -158,6 +160,27 @@ function Blocked({ sb, onOut }: { sb: SupabaseClient; onOut: () => void }) {
 // ---------------------------------------------------------------------
 const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true
 const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent)
+const native = Capacitor.isNativePlatform()
+
+// تطبيق الأندرويد: بنسجّل الموبايل في Firebase (FCM) ونحفظ الـ token في push_subscriptions
+// على هيئة endpoint يبدأ بـ fcm: — ودالة push-notify بتفرّق بينه وبين اشتراكات المتصفح
+async function registerNative(sb: SupabaseClient, me: Row) {
+  await PushNotifications.createChannel({ id: 'wali', name: 'إشعارات والي بلازا', importance: 5, visibility: 1, sound: 'default', vibration: true, lights: true, lightColor: '#FF7A1A' })
+  await PushNotifications.removeAllListeners()
+  const token = new Promise<string>((ok, fail) => {
+    PushNotifications.addListener('registration', (t) => ok(t.value))
+    PushNotifications.addListener('registrationError', (e) => fail(new Error(e.error)))
+  })
+  // الضغط على الإشعار بيفتح تفاصيله
+  PushNotifications.addListener('pushNotificationActionPerformed', (a) => {
+    const id = a.notification.data?.id
+    if (id) location.hash = `#/n/${id}`
+  })
+  PushNotifications.addListener('pushNotificationReceived', () => window.dispatchEvent(new Event('wali-push')))
+  await PushNotifications.register()
+  const t = await token
+  await sb.from('push_subscriptions').upsert({ user_id: me.id, endpoint: `fcm:${t}`, p256dh: '', auth: '', user_agent: navigator.userAgent }, { onConflict: 'endpoint' })
+}
 
 // أندرويد: Chrome بيبعت حدث التثبيت، بنمسكه عشان نعرض زرار «تثبيت التطبيق»
 let installEvt: any = null
@@ -171,7 +194,7 @@ function InstallCard() {
     window.addEventListener('appinstalled', () => { installEvt = null; setCan(false) })
     return () => window.removeEventListener('wali-install', on)
   }, [])
-  if (isStandalone() || isIOS() || !can) return null
+  if (native || isStandalone() || isIOS() || !can) return null
   const install = async () => { installEvt.prompt(); await installEvt.userChoice; installEvt = null; setCan(false) }
   return (
     <button onClick={install} className="w-full mt-5 rounded-3xl border border-ink-600 bg-ink-900 p-4 flex items-center gap-3 text-right active:scale-[.98] transition">
@@ -193,17 +216,30 @@ function PushCard({ sb, me }: { sb: SupabaseClient; me: Row }) {
   const [state, setState] = useState<'checking' | 'install' | 'off' | 'on' | 'denied' | 'unsupported'>('checking')
   const [busy, setBusy] = useState(false)
   const check = useCallback(async () => {
+    if (native) {
+      const p = (await PushNotifications.checkPermissions()).receive
+      if (p === 'denied') return setState('denied')
+      if (p !== 'granted') return setState('off')
+      // كل مرة التطبيق يفتح بنجدد الـ token (ممكن يتغير)
+      registerNative(sb, me).catch(() => {})
+      return setState('on')
+    }
     if (isIOS() && !isStandalone()) return setState('install')
     if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return setState('unsupported')
     if (Notification.permission === 'denied') return setState('denied')
     const reg = await navigator.serviceWorker.ready
     setState((await reg.pushManager.getSubscription()) ? 'on' : 'off')
-  }, [])
+  }, [sb, me])
   useEffect(() => { check() }, [check])
 
   const enable = async () => {
     setBusy(true)
     try {
+      if (native) {
+        if ((await PushNotifications.requestPermissions()).receive !== 'granted') return setState('denied')
+        await registerNative(sb, me)
+        return setState('on')
+      }
       if ((await Notification.requestPermission()) !== 'granted') return setState('denied')
       const reg = await navigator.serviceWorker.ready
       const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToU8(VAPID) })
@@ -225,6 +261,8 @@ function PushCard({ sb, me }: { sb: SupabaseClient; me: Row }) {
             <li className="flex gap-2"><span className="num text-brand-400 font-black">3</span> افتح التطبيق من الأيقونة وفعّل الإشعارات</li>
           </ol>
         </>
+      ) : state === 'denied' && native ? (
+        <div className="text-[14px] leading-6">الإشعارات مقفولة. افتح <b>إعدادات الموبايل ← التطبيقات ← WALI CORE ← الإشعارات</b> وفعّلها، وبعدين ارجع للتطبيق.</div>
       ) : state === 'denied' ? (
         <div className="text-[14px] leading-6">الإشعارات مقفولة. دوس على علامة القفل جنب الرابط فوق ← <b>الأذونات ← الإشعارات</b> وخليها «سماح»، أو من <b>إعدادات الموبايل ← التطبيقات ← والي بلازا ← الإشعارات</b>.</div>
       ) : state === 'unsupported' ? (
@@ -266,9 +304,10 @@ function Home({ sb, me, onOut }: { sb: SupabaseClient; me: Row; onOut: () => voi
     const ch = sb.channel('admin-n').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, () => load()).subscribe()
     const onMsg = () => load()
     navigator.serviceWorker?.addEventListener('message', onMsg)
+    window.addEventListener('wali-push', onMsg)
     const onVis = () => document.visibilityState === 'visible' && load()
     document.addEventListener('visibilitychange', onVis)
-    return () => { sb.removeChannel(ch); navigator.serviceWorker?.removeEventListener('message', onMsg); document.removeEventListener('visibilitychange', onVis) }
+    return () => { sb.removeChannel(ch); navigator.serviceWorker?.removeEventListener('message', onMsg); window.removeEventListener('wali-push', onMsg); document.removeEventListener('visibilitychange', onVis) }
   }, [sb, load])
 
   // فتح إشعار من اللينك (#/n/<id>) لما يدوس على الإشعار
