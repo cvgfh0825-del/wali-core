@@ -350,9 +350,16 @@ export class DemoBackend implements Backend {
 // ---------------------------------------------------------------------
 export type Conn = { mode: 'supabase'; url: string; key: string } | { mode: 'demo' }
 
+// مشروع والي بلازا (المفاتيح دي عامة ومش سرية)
+const WALI = { url: 'https://avqwkxoeptkbzxdckedy.supabase.co', key: 'sb_publishable_P3BzxNxjqMMZeXjSlRCkYw_YjIyPZgJ' }
+// نسخة الموقع (Vercel) مقفولة على قاعدة بيانات والي بلازا: من غير وضع تجربة ولا تغيير قاعدة البيانات
+// (برنامج الويندوز ووقت التطوير زي ما هم)
+export const LOCKED = !(window as any).wali && !import.meta.env.DEV
+
 export function savedConn(): Conn | null {
   const envUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined
   const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
+  if (LOCKED) return { mode: 'supabase', url: envUrl || WALI.url, key: envKey || WALI.key }
   try {
     const s = localStorage.getItem('wali-conn')
     if (s) return JSON.parse(s)
@@ -361,6 +368,7 @@ export function savedConn(): Conn | null {
   return null
 }
 export function saveConn(c: Conn | null) {
+  if (LOCKED) return
   if (c) localStorage.setItem('wali-conn', JSON.stringify(c))
   else localStorage.removeItem('wali-conn')
 }

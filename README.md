@@ -26,6 +26,7 @@
 6. `supabase/migrations/0006_backup.sql` (النسخ الاحتياطي والاسترجاع)
 7. `supabase/migrations/0007_product_images.sql` (صور الأصناف في جدول لوحدها)
 8. `supabase/migrations/0008_fusha_messages.sql` (رسائل النظام والإشعارات بالفصحى)
+9. `supabase/migrations/0009_backup_storage.sql` (مخزن النسخ الاحتياطية التلقائية لنسخة الموقع)
 
 ### 2) أول حساب (هيبقى Admin تلقائياً)
 من **Authentication ← Users ← Add user**:
@@ -56,6 +57,14 @@ insert into private.config values
   ('webhook_secret', '<نفس WEBHOOK_SECRET>');
 ```
 (على مشروع والي بلازا الحالي ده متعمل خلاص، والسر محفوظ في `supabase/.webhook-secret`.)
+
+---
+
+## نسخة الموقع (Vercel)
+
+نفس برنامج `desktop/` بيترفع كموقع: مشروع Vercel جديد من نفس الـ repo، و**Root Directory = `desktop`** (الإعدادات في `desktop/vercel.json`).
+- الموقع مقفول على قاعدة بيانات والي بلازا: مفيش وضع تجربة ولا «تغيير قاعدة البيانات».
+- النسخة الاحتياطية اليومية بتترفع على مخزن `backups` الخاص في Supabase (آخر 30 يوم)، وتتسترجع من الإعدادات.
 
 ---
 

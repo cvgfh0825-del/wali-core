@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Settings as Cog, Building2, Clock, DatabaseBackup, ScrollText, ImagePlus, Download, Unplug, Upload, History, FolderOpen } from 'lucide-react'
+import { Settings as Cog, Building2, Clock, DatabaseBackup, ScrollText, ImagePlus, Download, Unplug, Upload, History, FolderOpen, CloudUpload, RotateCcw } from 'lucide-react'
 import { useApp, useLoad, useAction } from '../lib/app'
 import { PageHeader, Field, Tabs, Loading, Badge, Empty, useConfirm, NoAccess } from '../components/ui'
-import { saveConn } from '../lib/backend'
-import { makeBackup, lastAutoBackup } from '../lib/backup'
+import { saveConn, LOCKED } from '../lib/backend'
+import { makeBackup, lastAutoBackup, hasCloudBackups, listCloudBackups, uploadCloudBackup, downloadCloudBackup } from '../lib/backup'
 
 const TABLES = ['settings', 'profiles', 'categories', 'products', 'stock_movements', 'customers', 'suppliers', 'purchases', 'purchase_items',
   'invoices', 'invoice_items', 'sales_returns', 'delivery_permits', 'delivery_items', 'payments', 'expense_categories', 'expenses', 'exchange_rates',
@@ -119,9 +119,27 @@ function Backup() {
       }
     } catch (e: any) { toast(e.message, 'err') } finally { setBusy('') }
   }
+  const cloud = hasCloudBackups(db) && isAdmin
+  const list = useLoad(() => (cloud ? listCloudBackups(db) : Promise.resolve([])), [cloud])
   const restore = async (file: File) => {
     let p: any
     try { p = JSON.parse(await file.text()) } catch { return toast('هذا الملف ليس نسخة احتياطية', 'err') }
+    return restoreData(p)
+  }
+  const restoreCloud = async (path: string) => {
+    setBusy('جارٍ تحميل النسخة...')
+    let p: any
+    try { p = JSON.parse(await downloadCloudBackup(db, path)) } catch (e: any) { setBusy(''); return toast(e.message, 'err') }
+    setBusy('')
+    return restoreData(p)
+  }
+  const downloadCloud = async (path: string, name: string) => {
+    try {
+      const json = await downloadCloudBackup(db, path)
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' })); a.download = `wali-core-${name}`; a.click()
+    } catch (e: any) { toast(e.message, 'err') }
+  }
+  const restoreData = async (p: any) => {
     if (p?.app !== 'wali-core' || !p.tables) return toast('هذا الملف ليس نسخة احتياطية من WALI CORE', 'err')
     const ok = await confirm.ask('استرجاع النسخة الاحتياطية؟', {
       danger: true,
@@ -132,6 +150,7 @@ function Backup() {
       setBusy('جارٍ حفظ نسخة من الوضع الحالي...')
       const cur = await makeBackup(db, 'before-restore')
       if (w?.autoBackup) await w.autoBackup(cur.name, cur.json)
+      else if (cloud) await uploadCloudBackup(db, `before-restore/${cur.name}`, cur.json)
       else { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([cur.json], { type: 'application/json' })); a.download = cur.name; a.click() }
       setBusy('جارٍ الاسترجاع...')
       await db.rpc('restore_backup', { p })
@@ -163,11 +182,30 @@ function Backup() {
           </div>
         </div>
       )}
-      <div className="card p-6">
+      {cloud && (
+        <div className="card p-6">
+          <div className="font-bold flex items-center gap-2"><CloudUpload size={18} className="text-brand-500" /> نسخة تلقائية كل يوم</div>
+          <p className="text-sm text-zinc-400 mt-2 leading-7">عند أول دخول لمدير النظام كل يوم، تُحفظ نسخة تلقائيًا في مخزن خاص على الخادم لا يصل إليه غير مدير النظام، ويُحتفظ بآخر 30 يومًا.</p>
+          {list.loading ? <Loading /> : !list.data?.length ? <p className="text-sm text-zinc-500 mt-4">لا توجد نسخ بعد</p> : (
+            <div className="mt-4 divide-y divide-ink-700 border border-ink-700 rounded-xl max-h-80 overflow-auto">
+              {list.data.map((b) => (
+                <div key={b.path} className="flex items-center gap-3 px-4 py-2.5">
+                  <History size={16} className="text-zinc-500" />
+                  <span className="num flex-1">{b.name.replace('.json', '')}</span>
+                  <span className="num text-[12px] text-zinc-500">{(b.size / 1024 / 1024).toFixed(1)} م.ب</span>
+                  <button className="btn-ghost btn-sm" title="تنزيل" onClick={() => downloadCloud(b.path, b.name)}><Download size={15} /></button>
+                  <button className="btn-ghost btn-sm" disabled={!!busy} onClick={() => restoreCloud(b.path)}><RotateCcw size={15} /> استرجاع</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {!LOCKED && <div className="card p-6">
         <div className="font-bold flex items-center gap-2"><Unplug size={18} className="text-zinc-400" /> قاعدة البيانات</div>
         <p className="text-sm text-zinc-400 mt-2">لربط هذا الجهاز بقاعدة بيانات أخرى (أو للخروج من الوضع التجريبي).</p>
         <button className="btn-danger mt-4" onClick={async () => { if (await confirm.ask('هل تريد فصل الجهاز عن قاعدة البيانات؟', { danger: true, text: 'ستحتاج إلى إدخال بيانات Supabase مرة أخرى، ولن تُحذف البيانات نفسها.' })) { saveConn(null); location.reload() } }}>فصل وإعادة الإعداد</button>
-      </div>
+      </div>}
       {confirm.node}
     </div>
   )

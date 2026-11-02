@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Loader2, Database, FlaskConical, ArrowLeft, LogIn, User, Lock } from 'lucide-react'
-import { Backend, Conn, Profile, openBackend, saveConn, savedConn } from './lib/backend'
+import { Backend, Conn, Profile, LOCKED, openBackend, saveConn, savedConn } from './lib/backend'
 import { AppProvider, ToastProvider, useToasts } from './lib/app'
 import { Logo, Toaster, Field, Wordmark } from './components/ui'
 import { DeskScene } from './components/art'
@@ -54,7 +54,7 @@ function Root() {
         setDb(b)
         setMe(await b.restore().catch(() => null))
       })
-      .catch((e) => { push(e.message, 'err'); setConn(null); saveConn(null) })
+      .catch((e) => { push(e.message, 'err'); if (!LOCKED) { setConn(null); saveConn(null) } })
       .finally(() => alive && setBooting(false))
     return () => { alive = false }
   }, [conn, push])
@@ -209,9 +209,9 @@ function Login({ db, onLogin, onReset }: { db: Backend; onLogin: (p: Profile) =>
           </div>
         </div>
       )}
-      <button onClick={onReset} className="mt-6 text-[13px] text-zinc-500 hover:text-zinc-300">
+      {!LOCKED && <button onClick={onReset} className="mt-6 text-[13px] text-zinc-500 hover:text-zinc-300">
         {db.mode === 'demo' ? 'الخروج من الوضع التجريبي والربط بـ Supabase' : 'تغيير قاعدة البيانات'}
-      </button>
+      </button>}
     </AuthLayout>
   )
 }

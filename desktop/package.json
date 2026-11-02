@@ -8,6 +8,7 @@
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
+    "preview": "vite preview --port 4173 --strictPort",
     "build": "tsc --noEmit && vite build",
     "electron": "electron .",
     "dist": "npm run build && electron-builder --win --x64",

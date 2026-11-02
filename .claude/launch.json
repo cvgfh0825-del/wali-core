@@ -4,14 +4,35 @@
     {
       "name": "desktop",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "desktop", "run", "dev"],
+      "runtimeArgs": [
+        "--prefix",
+        "desktop",
+        "run",
+        "dev"
+      ],
       "port": 5173
     },
     {
       "name": "admin-app",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "admin-app", "run", "dev"],
+      "runtimeArgs": [
+        "--prefix",
+        "admin-app",
+        "run",
+        "dev"
+      ],
       "port": 5174
+    },
+    {
+      "name": "desktop-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "desktop",
+        "run",
+        "preview"
+      ],
+      "port": 4173
     }
   ]
 }
