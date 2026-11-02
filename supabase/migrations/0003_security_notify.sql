@@ -80,7 +80,7 @@ begin
        or (n ->> 'margin_pct') is distinct from (o ->> 'margin_pct') then
       v_title := 'تغيير سعر: ' || (n ->> 'name');
       v_body := pct(o ->> 'price_usd') || '$ ← ' || pct(n ->> 'price_usd') || '$';
-    elsif (n - 'qty_on_hand' - 'updated_at' - 'cost_usd') is distinct from (o - 'qty_on_hand' - 'updated_at' - 'cost_usd') then
+    elsif (n - 'qty_on_hand' - 'updated_at' - 'cost_usd' - 'image_v') is distinct from (o - 'qty_on_hand' - 'updated_at' - 'cost_usd' - 'image_v') then
       v_title := 'تعديل صنف: ' || (n ->> 'name');
     else return null; end if;
 

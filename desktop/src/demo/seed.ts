@@ -5,15 +5,19 @@ import m2 from '../../../supabase/migrations/0002_logic.sql?raw'
 import m3 from '../../../supabase/migrations/0003_security_notify.sql?raw'
 import m5 from '../../../supabase/migrations/0005_returns.sql?raw'
 import m6 from '../../../supabase/migrations/0006_backup.sql?raw'
+import m7 from '../../../supabase/migrations/0007_product_images.sql?raw'
 
 // نسخة تجربة قديمة محفوظة في الجهاز → نضيفلها التحديثات الجديدة
 export async function upgradeDemo(db: any) {
   const r = await db.query(`select to_regclass('public.sales_returns') is not null as m5,
-                                   to_regprocedure('public.export_backup()') is not null as m6`)
-  const { m5: has5, m6: has6 } = r.rows[0]
-  if (!has5) { await db.exec(m3); await db.exec(m5) }
-  if (!has6) await db.exec(m6)
-  return !has5 || !has6
+                                   to_regclass('public.product_images') is not null as m7`)
+  const { m5: has5, m7: has7 } = r.rows[0]
+  if (has7) return false
+  await db.exec(m3)
+  if (!has5) await db.exec(m5)
+  await db.exec(m6)
+  await db.exec(m7)
+  return true
 }
 
 const PRODUCTS: [string, string, string, string, number, number, number][] = [
@@ -68,6 +72,7 @@ export async function setupDemo(db: any, onProgress?: (m: string) => void) {
   await db.exec(m3)
   await db.exec(m5)
   await db.exec(m6)
+  await db.exec(m7)
   await db.exec(`create table if not exists demo_passwords (username text primary key, password text not null)`)
 
   onProgress?.('بنضيف المستخدمين...')

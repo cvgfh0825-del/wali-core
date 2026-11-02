@@ -1,4 +1,4 @@
-# WALI CORE — نظام إدارة والي بلازا
+﻿# WALI CORE — نظام إدارة والي بلازا
 
 ## المشروع فيه إيه
 
@@ -24,6 +24,7 @@
 4. `supabase/migrations/0004_push_webhook.sql` (ربط الإشعارات بالموبايل)
 5. `supabase/migrations/0005_returns.sql` (مرتجع جزئي من الفاتورة + إلغاء المشتريات)
 6. `supabase/migrations/0006_backup.sql` (النسخ الاحتياطي والاسترجاع)
+7. `supabase/migrations/0007_product_images.sql` (صور الأصناف في جدول لوحدها)
 
 ### 2) أول حساب (هيبقى Admin تلقائياً)
 من **Authentication ← Users ← Add user**:

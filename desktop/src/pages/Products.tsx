@@ -3,7 +3,8 @@ import { useSearchParams } from 'react-router-dom'
 import { Package, Plus, Pencil, Tags, Barcode as BarcodeIcon, ImagePlus, Download, LayoutGrid, List, Printer, Trash2, RefreshCcw } from 'lucide-react'
 import { useApp, useLoad, useAction } from '../lib/app'
 import { PageHeader, SearchBox, Money, Badge, Empty, Loading, Modal, Field, Tabs, NoAccess } from '../components/ui'
-import { ProductArt } from '../components/art'
+import { ProductImage } from '../components/ProductImage'
+import { productImage, rememberImage } from '../lib/images'
 import { printDoc, LabelsDoc, Barcode } from '../components/Print'
 import { usd, qty, num, downloadCSV } from '../lib/format'
 import type { Row } from '../lib/backend'
@@ -58,7 +59,7 @@ export default function Products() {
           {rows.map((p: any) => (
             <button key={p.id} onClick={() => can('products', 'edit') && setEdit(p)} className="card overflow-hidden text-right hover:border-brand-500/40 transition group">
               <div className="aspect-[4/3] bg-ink-900 relative overflow-hidden">
-                {p.image ? <img src={p.image} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" /> : <ProductArt name={p.name} className="w-full h-full p-8" />}
+                <ProductImage p={p} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" artClassName="w-full h-full p-8" />
                 <span className="absolute top-2 left-2 chip bg-ink-950/80 backdrop-blur num">{p.code}</span>
                 {Number(p.qty_on_hand) <= Number(p.min_qty) && <span className="absolute top-2 right-2 chip bg-red-500/80 text-white">قرب يخلص</span>}
               </div>
@@ -81,7 +82,7 @@ export default function Products() {
               <tbody>
                 {rows.map((p: any) => (
                   <tr key={p.id}>
-                    <td className="py-2">{p.image ? <img src={p.image} className="w-10 h-10 rounded-lg object-cover" /> : <ProductArt name={p.name} className="w-10 h-10" />}</td>
+                    <td className="py-2"><ProductImage p={p} className="w-10 h-10 rounded-lg object-cover" /></td>
                     <td className="num"><div>{p.code}</div><div className="text-[10px] text-zinc-500">{p.barcode}</div></td>
                     <td><div className="font-semibold">{p.name}</div><div className="text-[12px] text-zinc-500" dir="ltr">{p.model}</div></td>
                     <td className="text-zinc-400 text-[13px]">{p.category_name}</td>
@@ -117,7 +118,10 @@ async function resizeImage(file: File, max = 420): Promise<string> {
   const s = Math.min(1, max / Math.max(img.width, img.height))
   const c = document.createElement('canvas')
   c.width = Math.round(img.width * s); c.height = Math.round(img.height * s)
-  c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height)
+  const ctx = c.getContext('2d')!
+  ctx.fillStyle = '#ffffff' // الصور الشفافة (PNG) كانت خلفيتها بتقلب سودا في JPEG
+  ctx.fillRect(0, 0, c.width, c.height)
+  ctx.drawImage(img, 0, 0, c.width, c.height)
   URL.revokeObjectURL(img.src)
   return c.toDataURL('image/jpeg', 0.8)
 }
@@ -128,9 +132,14 @@ function ProductForm({ p, cats, onClose }: { p: Row; cats: Row[]; onClose: () =>
   const isNew = !p.id
   const [f, setF] = useState<Row>({
     code: '', barcode: '', name: '', model: '', category_id: '', unit: 'قطعة', cost_usd: '', margin_pct: '30', price_usd: '',
-    auto_price: true, min_qty: '2', image: null, notes: '', is_active: true, opening: '', ...p,
+    auto_price: true, min_qty: '2', notes: '', is_active: true, opening: '', ...p, image: null,
   })
   const set = (k: string, v: any) => setF((x) => ({ ...x, [k]: v }))
+  // الصورة الحالية من الكاش، وبنعرف إنها اتغيرت لو اختلفت عن دي
+  const [origImage, setOrig] = useState<string | null>(null)
+  useEffect(() => {
+    if (p.id && p.image_v) productImage(db, p.id, p.image_v).then((s) => { setOrig(s); setF((x) => ({ ...x, image: x.image ?? s })) })
+  }, [db, p.id, p.image_v])
   useEffect(() => {
     if (isNew && !f.code) db.list('products', { order: [{ col: 'code', asc: false }], limit: 1 }).then((r) => {
       const last = Number(r[0]?.code)
@@ -143,13 +152,19 @@ function ProductForm({ p, cats, onClose }: { p: Row; cats: Row[]; onClose: () =>
     const row: Row = {
       code: String(f.code).trim(), barcode: String(f.barcode ?? '').trim() || null, name: f.name.trim(), model: f.model || null,
       category_id: f.category_id || null, unit: f.unit || 'قطعة', cost_usd: Number(f.cost_usd || 0), margin_pct: Number(f.margin_pct || 0),
-      price_usd: price, auto_price: !!f.auto_price, min_qty: Number(f.min_qty || 0), image: f.image || null, notes: f.notes || null, is_active: !!f.is_active,
+      price_usd: price, auto_price: !!f.auto_price, min_qty: Number(f.min_qty || 0), notes: f.notes || null, is_active: !!f.is_active,
     }
     const ok = await run(async () => {
+      let id = p.id
       if (isNew) {
-        const [created] = await db.insert('products', row)
-        if (Number(f.opening) > 0) await db.rpc('adjust_stock', { p_product: created.id, p_new_qty: Number(f.opening), p_note: 'رصيد افتتاحي', p_opening: true })
+        const [created] = await db.insert<Row>('products', row)
+        id = created.id
+        if (Number(f.opening) > 0) await db.rpc('adjust_stock', { p_product: id, p_new_qty: Number(f.opening), p_note: 'رصيد افتتاحي', p_opening: true })
       } else await db.update('products', p.id, row)
+      if ((f.image || null) !== origImage) {
+        const v = await db.rpc<number>('set_product_image', { p_id: id, p_image: f.image || null })
+        rememberImage(id, Number(v), f.image || null)
+      }
       return true
     }, isNew ? 'الصنف اتضاف' : 'اتحفظ التعديل')
     if (ok) onClose()

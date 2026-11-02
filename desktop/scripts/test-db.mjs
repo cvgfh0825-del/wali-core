@@ -8,7 +8,7 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const mig = (f) => readFileSync(path.join(here, '../../supabase/migrations', f), 'utf8')
 const db = new PGlite()
 await db.exec(readFileSync(path.join(here, '../src/demo/bootstrap.sql'), 'utf8'))
-for (const f of ['0001_core.sql', '0002_logic.sql', '0003_security_notify.sql', '0005_returns.sql', '0006_backup.sql']) {
+for (const f of ['0001_core.sql', '0002_logic.sql', '0003_security_notify.sql', '0005_returns.sql', '0006_backup.sql', '0007_product_images.sql']) {
   try { await db.exec(mig(f)); console.log('✔', f) }
   catch (e) { console.error('✘', f, e.message, e.position ?? ''); process.exit(1) }
 }
@@ -203,6 +203,28 @@ ok(Number((await one(`select count(*) c from invoice_items where returned_qty = 
 await expectErr(() => one(`select restore_backup($1)`, [JSON.stringify({ app: 'x', tables: {} })]), 'ملف غلط ميتسترجعش')
 const ret2 = await one(`select count(*) c from sales_returns`)
 ok(Number(ret2.c) === 1 && counts.sales_returns === 1, 'المرتجعات رجعت مع النسخة')
+
+// صور الأصناف: في جدول لوحدها، والقايمة فيها رقم النسخة بس
+const img = 'data:image/jpeg;base64,' + 'A'.repeat(30000)
+const notifBefore = Number((await one(`select count(*) c from notifications`)).c)
+ok(Number((await one(`select set_product_image($1, $2) v`, [p1, img])).v) === 1, 'الصورة اتحفظت (نسخة 1)')
+ok(Number((await one(`select count(*) c from notifications`)).c) === notifBefore, 'تغيير الصورة بس مبيطلّعش إشعار')
+const vp = await one(`select * from v_products where id=$1`, [p1])
+ok(!('image' in vp) && vp.image_v === 1, 'قايمة الأصناف مفيهاش الصورة نفسها')
+ok((await one(`select image from product_images where product_id=$1`, [p1])).image === img, 'الصورة في جدولها')
+await one(`select set_product_image($1, null)`, [p1])
+ok(Number((await one(`select count(*) c from product_images`)).c) === 0 && Number((await one(`select image_v from products where id=$1`, [p1])).image_v) === 2, 'شيل الصورة')
+await expectErr(() => one(`select set_product_image($1, $2)`, [p1, 'x'.repeat(500000)]), 'صورة كبيرة جداً مترفضش')
+await as(seller)
+await expectErr(() => one(`select set_product_image($1, $2)`, [p1, img]), 'سارة متقدرش تغيّر الصور')
+await as(admin)
+// نسخة قديمة كانت الصورة فيها جوه الصنف
+const legacy = JSON.parse(JSON.stringify(bk))
+delete legacy.tables.product_images
+legacy.tables.products.forEach((r) => { r.image = r.id === p2 ? img : null; delete r.image_v })
+await one(`select restore_backup($1)`, [JSON.stringify(legacy)])
+const lp = await one(`select image_v, (select image from product_images where product_id = p.id) image from products p where id=$1`, [p2])
+ok(lp.image_v === 1 && lp.image === img, 'صور النسخ القديمة اتنقلت لجدول الصور')
 
 const notes = await one(`select count(*) c from notifications`)
 const audit = await one(`select count(*) c from audit_log`)

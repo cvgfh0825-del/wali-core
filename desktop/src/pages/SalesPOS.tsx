@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ScanBarcode, Plus, Minus, Trash2, FileClock, CheckCircle2, User, Phone, Printer, ShoppingCart, X, AlertTriangle, PackageSearch } from 'lucide-react'
 import { useApp, useLoad, useAction } from '../lib/app'
 import { Money, Field, Modal, Empty, Segmented, NoAccess } from '../components/ui'
-import { ProductArt } from '../components/art'
+import { ProductImage } from '../components/ProductImage'
 import { printDoc, InvoiceDoc } from '../components/Print'
 import { num, qty, usd, sdg } from '../lib/format'
 import type { Row } from '../lib/backend'
@@ -128,7 +128,7 @@ export default function SalesPOS() {
                 const inCart = lines.find((l) => l.product.id === p.id)?.qty ?? 0
                 return (
                   <tr key={p.id} className="cursor-pointer" onDoubleClick={() => add(p)}>
-                    <td className="py-2">{p.image ? <img src={p.image} className="w-9 h-9 rounded-lg object-cover" /> : <ProductArt name={p.name} className="w-9 h-9" />}</td>
+                    <td className="py-2"><ProductImage p={p} className="w-9 h-9 rounded-lg object-cover" /></td>
                     <td className="text-zinc-400 num whitespace-nowrap text-[12px]" dir="ltr">{p.model}</td>
                     <td className="font-semibold max-w-[210px] truncate" title={p.name}>{p.name}</td>
                     <td className="num text-zinc-400">{p.code}</td>

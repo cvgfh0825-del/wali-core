@@ -60,6 +60,16 @@ begin
     end if;
   end loop;
 
+  -- نسخ قديمة (قبل 0007) كانت صورة الصنف جوه الصنف نفسه
+  if to_regclass('public.product_images') is not null and not (data ? 'product_images')
+     and jsonb_typeof(data -> 'products') = 'array' then
+    execute 'insert into public.product_images (product_id, image)
+             select (x ->> ''id'')::uuid, x ->> ''image'' from jsonb_array_elements($1) x
+              where coalesce(x ->> ''image'', '''') <> '''' on conflict do nothing' using data -> 'products';
+    execute 'update public.products set image_v = 1
+              where image_v = 0 and id in (select product_id from public.product_images)';
+  end if;
+
   if jsonb_typeof(data -> 'settings') = 'array' and jsonb_array_length(data -> 'settings') > 0 then
     select string_agg(quote_ident(c.column_name), ', ' order by c.ordinal_position) into cols
       from information_schema.columns c

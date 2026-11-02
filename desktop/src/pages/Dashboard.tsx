@@ -6,7 +6,7 @@ import {
 import { useApp, useLoad } from '../lib/app'
 import { Stat, Money, Loading, Tabs, Badge, Empty } from '../components/ui'
 import { AreaChart, BarList } from '../components/charts'
-import { ProductArt } from '../components/art'
+import { ProductImage } from '../components/ProductImage'
 import { daysAgo, today, short, ago, qty, date } from '../lib/format'
 
 const RANGES = { '7': 'أسبوع', '30': 'شهر', '90': '3 شهور' } as const
@@ -104,7 +104,7 @@ export default function Dashboard() {
             <div className="space-y-2">
               {(low.data ?? []).map((p: any) => (
                 <div key={p.id} className="flex items-center gap-3 p-2 rounded-xl hover:bg-ink-800">
-                  {p.image ? <img src={p.image} className="w-10 h-10 rounded-lg object-cover" /> : <ProductArt name={p.name} className="w-10 h-10" />}
+                  <ProductImage p={p} className="w-10 h-10 rounded-lg object-cover" />
                   <div className="flex-1 min-w-0"><div className="text-sm truncate">{p.name}</div><div className="text-[11px] text-zinc-500 num">{p.code}</div></div>
                   <Badge cls={Number(p.qty_on_hand) <= Number(p.min_qty) ? 'bg-red-500/15 text-red-300' : 'bg-ink-700 text-zinc-300'}>{qty(p.qty_on_hand)}</Badge>
                 </div>
