@@ -36,7 +36,8 @@ Deno.serve(async (req) => {
     try {
       await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, message, {
         TTL: 60 * 60 * 24,
-        urgency: n.level === 'danger' || n.level === 'warning' ? 'high' : 'normal',
+        // high علشان أندرويد ميأجلش الإشعار والموبايل نايم
+        urgency: 'high',
       })
       sent++
     } catch (e) {
