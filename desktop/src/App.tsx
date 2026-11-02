@@ -103,7 +103,7 @@ function Splash({ text }: { text?: string }) {
       <div className="animate-rise"><Logo size={92} glow /></div>
       <Wordmark />
       <div className="flex items-center gap-2 text-sm text-zinc-400 h-6">
-        <Loader2 size={16} className="animate-spin text-brand-500" /> {text || 'بنفتح السيستم...'}
+        <Loader2 size={16} className="animate-spin text-brand-500" /> {text || 'جارٍ فتح النظام...'}
       </div>
     </div>
   )
@@ -124,7 +124,7 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
           <DeskScene className="w-full max-w-[560px] mx-auto drop-shadow-[0_30px_60px_rgba(0,0,0,.6)]" />
           <div>
             <div className="font-display text-4xl font-black leading-[1.3]">نجهّز مكتبك <span className="text-brand-500">بالكامل</span></div>
-            <p className="text-zinc-400 mt-3 max-w-md leading-7">المخزن والمعرض والفواتير والحسابات والموظفين — كله في مكان واحد، ومتزامن بين كل الأجهزة.</p>
+            <p className="text-zinc-400 mt-3 max-w-md leading-7">المخزن والمعرض والفواتير والحسابات والموظفون — كلها في مكان واحد، ومتزامنة بين جميع الأجهزة.</p>
             <div className="flex gap-6 mt-6 text-sm">
               {['24 قسم', 'ضمان سنة', 'تركيب احترافي'].map((t) => (
                 <div key={t} className="flex items-center gap-2 text-zinc-300"><span className="w-1.5 h-1.5 rounded-full bg-brand-500" />{t}</div>
@@ -143,8 +143,8 @@ function Connect({ onDone }: { onDone: (c: Conn) => void }) {
   return (
     <AuthLayout>
       <Logo size={56} glow />
-      <h1 className="font-display text-3xl font-black mt-6">أهلاً بيك في <span dir="ltr">WALI CORE</span></h1>
-      <p className="text-zinc-400 mt-2 leading-7">أول مرة بتفتح البرنامج على الجهاز ده. اربطه بقاعدة بيانات الشركة.</p>
+      <h1 className="font-display text-3xl font-black mt-6">مرحبًا بك في <span dir="ltr">WALI CORE</span></h1>
+      <p className="text-zinc-400 mt-2 leading-7">هذه أول مرة يُفتح فيها البرنامج على هذا الجهاز. اربطه بقاعدة بيانات الشركة.</p>
 
       <div className="card p-5 mt-8 space-y-4">
         <div className="flex items-center gap-2 font-bold"><Database size={18} className="text-brand-500" /> ربط بـ Supabase</div>
@@ -152,15 +152,15 @@ function Connect({ onDone }: { onDone: (c: Conn) => void }) {
         <Field label="المفتاح العام (anon key)"><input className="input" dir="ltr" value={key} onChange={(e) => setKey(e.target.value.trim())} /></Field>
         <button className="btn-primary w-full" disabled={!/^https:\/\/.+\.supabase\.co\/?$/.test(url) || key.length < 20}
           onClick={() => onDone({ mode: 'supabase', url: url.replace(/\/$/, ''), key })}>
-          اربط وكمّل <ArrowLeft size={18} />
+          ربط ومتابعة <ArrowLeft size={18} />
         </button>
       </div>
 
       <button onClick={() => onDone({ mode: 'demo' })} className="mt-4 w-full card p-4 flex items-center gap-3 text-right hover:border-brand-500/50 transition">
         <div className="w-10 h-10 rounded-xl bg-brand-500/10 text-brand-400 flex items-center justify-center"><FlaskConical size={20} /></div>
         <div className="flex-1">
-          <div className="font-bold">جرّب السيستم الأول</div>
-          <div className="text-[13px] text-zinc-400">وضع تجربة ببيانات وهمية على الجهاز ده بس</div>
+          <div className="font-bold">جرّب النظام أولًا</div>
+          <div className="text-[13px] text-zinc-400">وضع تجريبي ببيانات وهمية على هذا الجهاز فقط</div>
         </div>
         <ArrowLeft size={18} className="text-zinc-500" />
       </button>
@@ -182,13 +182,13 @@ function Login({ db, onLogin, onReset }: { db: Backend; onLogin: (p: Profile) =>
     <AuthLayout>
       <Logo size={56} glow />
       <h1 className="font-display text-3xl font-black mt-6">تسجيل الدخول</h1>
-      <p className="text-zinc-400 mt-2">ادخل باسم المستخدم وكلمة السر اللي الأدمن عملهولك.</p>
+      <p className="text-zinc-400 mt-2">أدخل اسم المستخدم وكلمة المرور التي أنشأها لك مدير النظام.</p>
       <form onSubmit={submit} className="mt-8 space-y-4">
         <Field label="اسم المستخدم">
           <div className="relative"><User size={17} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-500" />
             <input className="input pr-10" dir="ltr" autoFocus value={u} onChange={(e) => setU(e.target.value)} /></div>
         </Field>
-        <Field label="كلمة السر">
+        <Field label="كلمة المرور">
           <div className="relative"><Lock size={17} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-500" />
             <input className="input pr-10" dir="ltr" type="password" value={p} onChange={(e) => setP(e.target.value)} /></div>
         </Field>
@@ -199,7 +199,7 @@ function Login({ db, onLogin, onReset }: { db: Backend; onLogin: (p: Profile) =>
       </form>
       {db.mode === 'demo' && (
         <div className="mt-6 card p-4 text-[13px] text-zinc-400 leading-7">
-          <div className="font-bold text-brand-400 mb-1">وضع التجربة — حسابات جاهزة:</div>
+          <div className="font-bold text-brand-400 mb-1">الوضع التجريبي — حسابات جاهزة:</div>
           <div className="grid grid-cols-2 gap-x-4 num" dir="ltr">
             {[['admin', 'admin123', 'المدير'], ['sara', 'sara123', 'المعرض'], ['mohamed', 'mohamed123', 'المحاسب'], ['khaled', 'khaled123', 'المخزن']].map(([a, b, c]) => (
               <button key={a} type="button" onClick={() => { setU(a); setP(b) }} className="text-left hover:text-white">
@@ -210,7 +210,7 @@ function Login({ db, onLogin, onReset }: { db: Backend; onLogin: (p: Profile) =>
         </div>
       )}
       <button onClick={onReset} className="mt-6 text-[13px] text-zinc-500 hover:text-zinc-300">
-        {db.mode === 'demo' ? 'الخروج من وضع التجربة والربط بـ Supabase' : 'تغيير قاعدة البيانات'}
+        {db.mode === 'demo' ? 'الخروج من الوضع التجريبي والربط بـ Supabase' : 'تغيير قاعدة البيانات'}
       </button>
     </AuthLayout>
   )

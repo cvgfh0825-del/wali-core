@@ -113,7 +113,7 @@ export function Badge({ cls, children }: { cls: string; children: ReactNode }) {
   return <span className={`chip ${cls}`}>{children}</span>
 }
 
-export function Empty({ title = 'مفيش بيانات لسه', text, action }: { title?: string; text?: string; action?: ReactNode }) {
+export function Empty({ title = 'لا توجد بيانات بعد', text, action }: { title?: string; text?: string; action?: ReactNode }) {
   return (
     <div className="flex flex-col items-center justify-center text-center py-14 px-6">
       <EmptyArt className="w-40 h-28 mb-4 opacity-90" />
@@ -124,7 +124,7 @@ export function Empty({ title = 'مفيش بيانات لسه', text, action }: 
   )
 }
 
-export function Loading({ text = 'بنحمّل...' }: { text?: string }) {
+export function Loading({ text = 'جارٍ التحميل...' }: { text?: string }) {
   return (
     <div className="flex items-center justify-center gap-3 py-16 text-zinc-400">
       <Loader2 className="animate-spin text-brand-500" size={20} /> {text}
@@ -205,5 +205,5 @@ export function Segmented<T extends string>({ value, onChange, items }: { value:
 }
 
 export function NoAccess() {
-  return <Empty title="مش مسموحلك تدخل هنا" text="الصفحة دي محتاجة صلاحية. كلّم الأدمن لو محتاجها." />
+  return <Empty title="غير مسموح لك بالدخول إلى هذه الصفحة" text="هذه الصفحة تتطلب صلاحية خاصة. تواصل مع مدير النظام إذا احتجت إليها." />
 }

@@ -20,22 +20,22 @@ export default function Deliveries() {
   }
   const print = async (p: Row) => printDoc(<DeliveryDoc permit={p} items={await itemsOf(p)} settings={settings} />)
   const confirmDelivery = async (p: Row) => {
-    if (await confirm.ask(`تأكيد تسليم ${p.number}؟`, { text: `البضاعة خرجت من المخزن واتسلمت لـ ${p.receiver_name ?? p.customer_name}.` })) {
-      await run(() => db.rpc('confirm_delivery', { p_permit: p.id }), 'اتأكد التسليم')
+    if (await confirm.ask(`تأكيد تسليم ${p.number}؟`, { text: `خرجت البضاعة من المخزن وسُلِّمت إلى ${p.receiver_name ?? p.customer_name}.` })) {
+      await run(() => db.rpc('confirm_delivery', { p_permit: p.id }), 'تم تأكيد التسليم')
     }
   }
 
   if (!can('delivery')) return <NoAccess />
   return (
     <>
-      <PageHeader title="أذونات التسليم" subtitle="الحسابات بتطلّع الإذن من الفاتورة، والمخزن بيأكد إن البضاعة اتسلمت" icon={<Truck size={22} />} />
-      <Tabs value={tab} onChange={setTab} items={[{ key: 'pending', label: 'منتظرة التسليم' }, { key: 'delivered', label: 'اتسلمت' }, { key: 'cancelled', label: 'ملغية' }]} />
+      <PageHeader title="أذونات التسليم" icon={<Truck size={22} />} />
+      <Tabs value={tab} onChange={setTab} items={[{ key: 'pending', label: 'بانتظار التسليم' }, { key: 'delivered', label: 'سُلِّمت' }, { key: 'cancelled', label: 'ملغية' }]} />
       <div className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(340px,1fr))] gap-4">
-        {loading ? <Loading /> : !data?.length ? <div className="card col-span-full"><Empty title={tab === 'pending' ? 'مفيش أذونات مستنية' : 'مفيش'} /></div> : data.map((p: any) => (
+        {loading ? <Loading /> : !data?.length ? <div className="card col-span-full"><Empty title={tab === 'pending' ? 'لا توجد أذونات معلّقة' : 'لا يوجد'} /></div> : data.map((p: any) => (
           <PermitCard key={p.id} p={p} itemsOf={itemsOf}
             actions={<>
               {can('delivery', 'print') && <button className="btn-ghost btn-sm" onClick={() => print(p)}><Printer size={15} /> طباعة</button>}
-              {p.status === 'pending' && can('delivery', 'cancel') && <button className="btn-danger btn-sm" disabled={busy} onClick={async () => { if (await confirm.ask('إلغاء الإذن؟', { danger: true })) await run(() => db.rpc('cancel_delivery', { p_permit: p.id }), 'الإذن اتلغى') }}><Ban size={15} /></button>}
+              {p.status === 'pending' && can('delivery', 'cancel') && <button className="btn-danger btn-sm" disabled={busy} onClick={async () => { if (await confirm.ask('إلغاء الإذن؟', { danger: true })) await run(() => db.rpc('cancel_delivery', { p_permit: p.id }), 'أُلغي الإذن') }}><Ban size={15} /></button>}
               {p.status === 'pending' && can('delivery', 'approve') && <button className="btn-primary btn-sm mr-auto" disabled={busy} onClick={() => confirmDelivery(p)}><CheckCircle2 size={15} /> تأكيد التسليم</button>}
             </>} />
         ))}
@@ -59,7 +59,7 @@ function PermitCard({ p, itemsOf, actions }: { p: Row; itemsOf: (p: Row) => Prom
           <div key={k} className="flex justify-between text-[13px] bg-ink-900 rounded-lg px-3 py-2"><span className="truncate">{i.name}</span><span className="num font-bold text-brand-300">× {qty(i.qty)}</span></div>
         ))}
       </div>
-      <div className="text-[11px] text-zinc-500 mt-3">طلّعه {p.created_by_name} · {dateTime(p.created_at)}{p.delivered_at && <><br />سلّمه {p.delivered_by_name} · {dateTime(p.delivered_at)}</>}</div>
+      <div className="text-[11px] text-zinc-500 mt-3">أصدره {p.created_by_name} · {dateTime(p.created_at)}{p.delivered_at && <><br />سلّمه {p.delivered_by_name} · {dateTime(p.delivered_at)}</>}</div>
       <div className="flex items-center gap-2 mt-4">{actions}</div>
     </div>
   )

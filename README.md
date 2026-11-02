@@ -25,6 +25,7 @@
 5. `supabase/migrations/0005_returns.sql` (مرتجع جزئي من الفاتورة + إلغاء المشتريات)
 6. `supabase/migrations/0006_backup.sql` (النسخ الاحتياطي والاسترجاع)
 7. `supabase/migrations/0007_product_images.sql` (صور الأصناف في جدول لوحدها)
+8. `supabase/migrations/0008_fusha_messages.sql` (رسائل النظام والإشعارات بالفصحى)
 
 ### 2) أول حساب (هيبقى Admin تلقائياً)
 من **Authentication ← Users ← Add user**:

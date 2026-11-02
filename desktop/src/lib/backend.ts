@@ -44,13 +44,13 @@ const clean = (t: string) => t.replace(/[,()%*\\]/g, ' ').trim()
 
 const arErr = (e: any): Error => {
   const m: string = e?.message ?? String(e)
-  if (/Invalid login credentials/i.test(m)) return new Error('اسم المستخدم أو كلمة السر غلط')
-  if (/duplicate key.*code/i.test(m)) return new Error('الكود ده مستخدم قبل كده لصنف تاني')
-  if (/duplicate key.*barcode/i.test(m)) return new Error('الباركود ده مستخدم قبل كده')
-  if (/duplicate key/i.test(m)) return new Error('القيمة دي موجودة قبل كده')
+  if (/Invalid login credentials/i.test(m)) return new Error('اسم المستخدم أو كلمة المرور غير صحيحة')
+  if (/duplicate key.*code/i.test(m)) return new Error('هذا الكود مستخدم لصنف آخر')
+  if (/duplicate key.*barcode/i.test(m)) return new Error('هذا الباركود مستخدم من قبل')
+  if (/duplicate key/i.test(m)) return new Error('هذه القيمة موجودة من قبل')
   if (/row-level security|permission denied/i.test(m)) return new Error('ليس لديك صلاحية لهذه العملية')
-  if (/Failed to fetch|NetworkError|fetch failed/i.test(m)) return new Error('مفيش اتصال بالسيرفر، اتأكد من النت')
-  if (/violates foreign key/i.test(m)) return new Error('مينفعش تحذف ده لأنه مستخدم في عمليات تانية')
+  if (/Failed to fetch|NetworkError|fetch failed/i.test(m)) return new Error('تعذّر الاتصال بالخادم، تحقق من اتصال الإنترنت')
+  if (/violates foreign key/i.test(m)) return new Error('لا يمكن الحذف لأن هذا العنصر مستخدم في عمليات أخرى')
   return new Error(m)
 }
 
@@ -68,7 +68,7 @@ export class SupabaseBackend implements Backend {
     if (!u.user) return null
     const { data, error } = await this.sb.from('profiles').select('*').eq('id', u.user.id).single()
     if (error) throw arErr(error)
-    if (!data.is_active) { await this.sb.auth.signOut(); throw new Error('الحساب ده موقوف، كلّم الأدمن') }
+    if (!data.is_active) { await this.sb.auth.signOut(); throw new Error('هذا الحساب موقوف، تواصل مع مدير النظام') }
     return data as Profile
   }
   async signIn(username: string, password: string) {
@@ -186,7 +186,7 @@ export class DemoBackend implements Backend {
     await self.db.waitReady
     const ready = await self.db.query(`select to_regclass('public.settings') is not null as ok`)
     if (!ready.rows[0].ok) {
-      onProgress?.('بنجهّز قاعدة البيانات لأول مرة...')
+      onProgress?.('جارٍ تجهيز قاعدة البيانات لأول مرة...')
       const { setupDemo } = await import('../demo/seed')
       await setupDemo(self.db, onProgress)
       await self.persist()
@@ -219,8 +219,8 @@ export class DemoBackend implements Backend {
     const r = await this.db.query(
       `select p.* from profiles p join demo_passwords d on d.username = p.username where p.username = $1 and d.password = $2`,
       [username.trim().toLowerCase(), password])
-    if (!r.rows.length) throw new Error('اسم المستخدم أو كلمة السر غلط')
-    if (!r.rows[0].is_active) throw new Error('الحساب ده موقوف، كلّم الأدمن')
+    if (!r.rows.length) throw new Error('اسم المستخدم أو كلمة المرور غير صحيحة')
+    if (!r.rows[0].is_active) throw new Error('هذا الحساب موقوف، تواصل مع مدير النظام')
     this.user = r.rows[0]
     localStorage.setItem('wali-demo-user', this.user!.id)
     await this.asUser()
@@ -315,15 +315,15 @@ export class DemoBackend implements Backend {
     } catch (e) { throw arErr(e) }
   }
   async invoke<T>(fn: string, body: Row) {
-    if (fn !== 'admin-users') throw new Error('غير مدعوم في وضع التجربة')
+    if (fn !== 'admin-users') throw new Error('غير مدعوم في الوضع التجريبي')
     const can = await this.rpc<boolean>('has_perm', { p_module: 'users', p_action: 'create' })
     if (!can) throw new Error('ليس لديك صلاحية إدارة المستخدمين')
     if (body.action === 'create') {
       const username = String(body.username).trim().toLowerCase()
-      if (!/^[a-z0-9._-]{3,30}$/.test(username)) throw new Error('اسم المستخدم لازم يكون إنجليزي من 3 لـ 30 حرف')
-      if (String(body.password ?? '').length < 6) throw new Error('كلمة السر لازم 6 حروف على الأقل')
+      if (!/^[a-z0-9._-]{3,30}$/.test(username)) throw new Error('يجب أن يكون اسم المستخدم بالإنجليزية ومن 3 إلى 30 حرفًا')
+      if (String(body.password ?? '').length < 6) throw new Error('يجب ألا تقل كلمة المرور عن 6 أحرف')
       const exists = await this.db.query(`select 1 from profiles where username = $1`, [username])
-      if (exists.rows.length) throw new Error('اسم المستخدم ده موجود')
+      if (exists.rows.length) throw new Error('اسم المستخدم هذا موجود بالفعل')
       const r = await this.db.query(
         `insert into auth.users (email, raw_user_meta_data) values ($1, $2::jsonb) returning id`,
         [toEmail(username), JSON.stringify({ username, full_name: body.full_name, role: body.role, permissions: body.permissions })])
@@ -332,7 +332,7 @@ export class DemoBackend implements Backend {
       return { id: r.rows[0].id } as T
     }
     if (body.action === 'set_password') {
-      if (String(body.password ?? '').length < 6) throw new Error('كلمة السر لازم 6 حروف على الأقل')
+      if (String(body.password ?? '').length < 6) throw new Error('يجب ألا تقل كلمة المرور عن 6 أحرف')
       await this.db.query(`update demo_passwords set password = $1 where username = (select username from profiles where id = $2)`, [body.password, body.id])
       return { ok: true } as T
     }

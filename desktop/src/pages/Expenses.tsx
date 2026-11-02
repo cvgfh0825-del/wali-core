@@ -46,7 +46,7 @@ export default function Expenses() {
                   <td className="text-zinc-300">{e.description}</td>
                   <td><Money v={e.amount_sdg} className="font-bold" /></td>
                   <td className="text-zinc-500">{e.created_by_name}</td>
-                  <td>{isAdmin && !e.ref_type && <button className="p-2 text-zinc-500 hover:text-red-300" onClick={async () => { if (await confirm.ask('حذف المصروف ده؟', { danger: true })) await run(() => db.remove('expenses', e.id), 'اتحذف') }}><Trash2 size={15} /></button>}</td>
+                  <td>{isAdmin && !e.ref_type && <button className="p-2 text-zinc-500 hover:text-red-300" onClick={async () => { if (await confirm.ask('هل تريد حذف هذا المصروف؟', { danger: true })) await run(() => db.remove('expenses', e.id), 'تم الحذف') }}><Trash2 size={15} /></button>}</td>
                 </tr>
               ))}</tbody>
             </table>
@@ -73,7 +73,7 @@ function NewExpense({ cats, onClose }: { cats: Row[]; onClose: () => void }) {
       let category_id = f.category_id
       if (category_id === '__new') category_id = (await db.insert('expense_categories', { name: newCat.trim() }))[0].id
       return db.insert('expenses', { category_id, amount_sdg: Number(f.amount_sdg), expense_date: f.expense_date, description: f.description || null })
-    }, 'المصروف اتسجل')
+    }, 'سُجِّل المصروف')
     if (ok) onClose()
   }
   return (

@@ -6,17 +6,22 @@ import m3 from '../../../supabase/migrations/0003_security_notify.sql?raw'
 import m5 from '../../../supabase/migrations/0005_returns.sql?raw'
 import m6 from '../../../supabase/migrations/0006_backup.sql?raw'
 import m7 from '../../../supabase/migrations/0007_product_images.sql?raw'
+import m8 from '../../../supabase/migrations/0008_fusha_messages.sql?raw'
 
 // نسخة تجربة قديمة محفوظة في الجهاز → نضيفلها التحديثات الجديدة
 export async function upgradeDemo(db: any) {
   const r = await db.query(`select to_regclass('public.sales_returns') is not null as m5,
-                                   to_regclass('public.product_images') is not null as m7`)
-  const { m5: has5, m7: has7 } = r.rows[0]
-  if (has7) return false
-  await db.exec(m3)
-  if (!has5) await db.exec(m5)
-  await db.exec(m6)
-  await db.exec(m7)
+                                   to_regclass('public.product_images') is not null as m7,
+                                   exists (select 1 from pg_proc where proname = 'check_out' and prosrc like '%لا يوجد حضور%') as m8`)
+  const { m5: has5, m7: has7, m8: has8 } = r.rows[0]
+  if (has8) return false
+  if (!has7) {
+    await db.exec(m3)
+    if (!has5) await db.exec(m5)
+    await db.exec(m6)
+    await db.exec(m7)
+  }
+  await db.exec(m8)
   return true
 }
 
@@ -65,7 +70,7 @@ const CUSTOMERS = [
 ]
 
 export async function setupDemo(db: any, onProgress?: (m: string) => void) {
-  onProgress?.('بنركّب الجداول والصلاحيات...')
+  onProgress?.('جارٍ إنشاء الجداول والصلاحيات...')
   await db.exec(bootstrap)
   await db.exec(m1)
   await db.exec(m2)
@@ -73,9 +78,10 @@ export async function setupDemo(db: any, onProgress?: (m: string) => void) {
   await db.exec(m5)
   await db.exec(m6)
   await db.exec(m7)
+  await db.exec(m8)
   await db.exec(`create table if not exists demo_passwords (username text primary key, password text not null)`)
 
-  onProgress?.('بنضيف المستخدمين...')
+  onProgress?.('جارٍ إضافة المستخدمين...')
   const users: [string, string, string, string, any][] = [
     ['admin', 'admin123', 'أ. والي (المدير)', 'admin', {}],
     ['sara', 'sara123', 'سارة — المعرض', 'showroom', perms('showroom')],
@@ -93,7 +99,7 @@ export async function setupDemo(db: any, onProgress?: (m: string) => void) {
   const as = (u: string) => db.query(`select set_config('request.jwt.claim.sub', $1, false)`, [ids[u]])
   await as('admin')
 
-  onProgress?.('بنضيف الأصناف والموردين...')
+  onProgress?.('جارٍ إضافة الأصناف والموردين...')
   const today = new Date()
   const day = (back: number) => { const d = new Date(today); d.setDate(d.getDate() - back); return d.toISOString().slice(0, 10) }
   // ريت الأيام اللي فاتت
@@ -116,7 +122,7 @@ export async function setupDemo(db: any, onProgress?: (m: string) => void) {
     prodIds[code] = r.rows[0].id
   }
 
-  onProgress?.('بنسجّل المشتريات والشحنات...')
+  onProgress?.('جارٍ تسجيل المشتريات والشحنات...')
   const groups = [PRODUCTS.slice(0, 16), PRODUCTS.slice(16, 24), PRODUCTS.slice(24)]
   for (let g = 0; g < 3; g++) {
     const items = groups[g].map(([code, , , , usd, , qty]) => ({ product_id: prodIds[code], qty, unit_price_usd: usd }))
@@ -130,7 +136,7 @@ export async function setupDemo(db: any, onProgress?: (m: string) => void) {
     await db.query(`update stock_movements set created_at = $1::date + time '11:00' where ref_id = $2`, [day(44 - g * 3), r.rows[0].r.id])
   }
 
-  onProgress?.('بنعمل فواتير الشهر...')
+  onProgress?.('جارٍ إنشاء فواتير الشهر...')
   const custIds: string[] = []
   for (const [n, ph] of CUSTOMERS) custIds.push((await db.query(`insert into customers (name, phone) values ($1, $2) returning id`, [n, ph])).rows[0].id)
 
@@ -178,7 +184,7 @@ export async function setupDemo(db: any, onProgress?: (m: string) => void) {
     } catch { /* */ }
   }
 
-  onProgress?.('بنضيف الموظفين والمساهمين...')
+  onProgress?.('جارٍ إضافة الموظفين والمساهمين...')
   const emp = async (u: string | null, name: string, title: string, salary: number, pct: number, basis = 'own') =>
     (await db.query(`insert into employees (user_id, full_name, job_title, base_salary, commission_pct, commission_basis, hired_at) values ($1,$2,$3,$4,$5,$6,$7) returning id`,
       [u ? ids[u] : null, name, title, salary, pct, basis, day(400)])).rows[0].id
@@ -205,7 +211,7 @@ export async function setupDemo(db: any, onProgress?: (m: string) => void) {
     await db.query(`insert into shareholder_terms (shareholder_id, effective_from, monthly_salary, sales_pct, profit_pct) values ($1,$2,$3,$4,$5)`, [s, day(700), sal, sp, pp])
   }
 
-  onProgress?.('بنسجّل المصروفات...')
+  onProgress?.('جارٍ تسجيل المصروفات...')
   const ec = Object.fromEntries((await db.query(`select id, name from expense_categories`)).rows.map((r: any) => [r.name, r.id]))
   const exps: [string, number, number, string][] = [
     ['إيجارات', 2500000, 30, 'إيجار المعرض — شهر'], ['كهرباء ومياه', 380000, 25, 'فاتورة الكهرباء'],
@@ -228,7 +234,7 @@ export async function setupDemo(db: any, onProgress?: (m: string) => void) {
   await db.query(`update notifications set read_at = now()`)
   await db.query(`update notifications set read_at = null where id in (select id from notifications order by created_at desc limit 7)`)
   await db.query(`select set_config('request.jwt.claim.sub', '', false)`)
-  onProgress?.('خلصنا!')
+  onProgress?.('اكتمل التجهيز!')
 }
 
 // صلاحيات جاهزة لكل دور (نفسها في lib/perms.ts)

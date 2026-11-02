@@ -18,7 +18,7 @@ export default function Users() {
   if (!can('users')) return <NoAccess />
   return (
     <>
-      <PageHeader title="المستخدمين والصلاحيات" subtitle="كل موظف ليه حساب، وكل حساب ليه صلاحيات بالتفصيل" icon={<ShieldCheck size={22} />}
+      <PageHeader title="المستخدمون والصلاحيات" icon={<ShieldCheck size={22} />}
         actions={can('users', 'create') && <button className="btn-primary" onClick={() => setEdit({})}><Plus size={18} /> مستخدم جديد</button>} />
       <div className="card overflow-hidden">
         {loading ? <Loading /> : !data?.length ? <Empty /> : (
@@ -26,10 +26,10 @@ export default function Users() {
             <thead><tr><th>المستخدم</th><th>اسم الدخول</th><th>الدور</th><th>عدد الصلاحيات</th><th>الحالة</th><th>من</th><th></th></tr></thead>
             <tbody>{data.map((u: any) => (
               <tr key={u.id}>
-                <td className="font-semibold">{u.full_name || '—'} {u.id === me.id && <span className="text-[11px] text-brand-400">(إنت)</span>}</td>
+                <td className="font-semibold">{u.full_name || '—'} {u.id === me.id && <span className="text-[11px] text-brand-400">(أنت)</span>}</td>
                 <td className="num" dir="ltr">{u.username}</td>
                 <td><Badge cls={roleCls[u.role]}>{ROLE_PRESETS[u.role]?.label}</Badge></td>
-                <td className="num text-zinc-400">{u.role === 'admin' ? 'كل حاجة' : Object.values(u.permissions ?? {}).reduce((s: number, a: any) => s + a.length, 0)}</td>
+                <td className="num text-zinc-400">{u.role === 'admin' ? 'جميع الصلاحيات' : Object.values(u.permissions ?? {}).reduce((s: number, a: any) => s + a.length, 0)}</td>
                 <td>{u.is_active ? <Badge cls="bg-emerald-500/15 text-emerald-300">نشط</Badge> : <Badge cls="bg-red-500/15 text-red-300">موقوف</Badge>}</td>
                 <td className="text-zinc-500">{date(u.created_at)}</td>
                 <td>{can('users', 'edit') && <button className="btn-ghost btn-sm" onClick={() => setEdit(u)}>تعديل</button>}</td>
@@ -66,7 +66,7 @@ function UserForm({ u, onClose }: { u: Row; onClose: () => void }) {
         if (pw) await db.invoke('admin-users', { action: 'set_password', id: u.id, password: pw })
       }
       return true
-    }, isNew ? 'الحساب اتعمل' : 'اتحفظ')
+    }, isNew ? 'أُنشئ الحساب' : 'تم الحفظ')
     if (ok) onClose()
   }
 
@@ -76,8 +76,8 @@ function UserForm({ u, onClose }: { u: Row; onClose: () => void }) {
       <div className="grid grid-cols-4 gap-3 mb-5">
         <Field label="الاسم الكامل"><input className="input" value={f.full_name} onChange={(e) => setF({ ...f, full_name: e.target.value })} /></Field>
         <Field label="اسم الدخول (إنجليزي)"><input className="input num" dir="ltr" disabled={!isNew} value={f.username} onChange={(e) => setF({ ...f, username: e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, '') })} /></Field>
-        {isNew ? <Field label="كلمة السر (6 حروف على الأقل)"><input className="input" dir="ltr" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} /></Field>
-          : <Field label="كلمة سر جديدة (اختياري)"><div className="relative"><KeyRound size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500" /><input className="input pr-9" dir="ltr" value={pw} onChange={(e) => setPw(e.target.value)} /></div></Field>}
+        {isNew ? <Field label="كلمة المرور (6 أحرف على الأقل)"><input className="input" dir="ltr" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} /></Field>
+          : <Field label="كلمة مرور جديدة (اختياري)"><div className="relative"><KeyRound size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500" /><input className="input pr-9" dir="ltr" value={pw} onChange={(e) => setPw(e.target.value)} /></div></Field>}
         {!isNew && <Field label="الحالة"><select className="input" value={f.is_active ? '1' : '0'} onChange={(e) => setF({ ...f, is_active: e.target.value === '1' })}><option value="1">نشط</option><option value="0">موقوف</option></select></Field>}
       </div>
       <div className="flex gap-2 mb-4 flex-wrap">
@@ -86,7 +86,7 @@ function UserForm({ u, onClose }: { u: Row; onClose: () => void }) {
         ))}
       </div>
       {f.role === 'admin' ? (
-        <div className="rounded-2xl border border-brand-500/30 bg-brand-500/10 p-5 text-sm leading-7">مدير النظام بيشوف ويعمل كل حاجة، وبيوصله كل الإشعارات.</div>
+        <div className="rounded-2xl border border-brand-500/30 bg-brand-500/10 p-5 text-sm leading-7">يطّلع مدير النظام على كل شيء ويملك جميع الصلاحيات، وتصله جميع الإشعارات.</div>
       ) : (
         <div className="rounded-2xl border border-ink-700 overflow-hidden">
           <table className="tbl">

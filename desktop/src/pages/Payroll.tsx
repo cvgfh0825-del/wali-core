@@ -22,29 +22,29 @@ export default function Payroll() {
   const rows = pr.data ?? []
   const totalNet = rows.reduce((s: number, r: any) => s + Number(r.net), 0)
 
-  const generate = async () => { await run(() => db.rpc('generate_payroll', { p_period: period }), 'اتحسبت المرتبات'); pr.reload() }
+  const generate = async () => { await run(() => db.rpc('generate_payroll', { p_period: period }), 'حُسبت المرتبات'); pr.reload() }
   const pay = async (r: any) => {
-    if (await confirm.ask(`صرف مرتب ${r.employee_name}؟`, { text: `الصافي ${sdg(r.net)} ج.س — هيتسجل مصروف رواتب وهتتقفل السلف والخصومات.` })) {
-      await run(() => db.rpc('pay_payroll', { p_id: r.id }), 'المرتب اتصرف'); pr.reload()
+    if (await confirm.ask(`صرف مرتب ${r.employee_name}؟`, { text: `الصافي ${sdg(r.net)} ج.س — سيُسجَّل مصروف رواتب وتُقفل السلفيات والخصومات.` })) {
+      await run(() => db.rpc('pay_payroll', { p_id: r.id }), 'صُرف المرتب'); pr.reload()
     }
   }
   const printSheet = () => printDoc(<TableDoc title={`كشف مرتبات ${monthName(period)}`} settings={settings} rows={rows} cols={[
     { key: 'employee_name', label: 'الموظف' }, { key: 'base_salary', label: 'الأساسي', fmt: sdg }, { key: 'commission', label: 'نسبة المبيعات', fmt: sdg },
-    { key: 'deductions', label: 'خصومات', fmt: sdg }, { key: 'advances', label: 'سلف', fmt: sdg }, { key: 'late_deduction', label: 'تأخير', fmt: sdg },
+    { key: 'deductions', label: 'خصومات', fmt: sdg }, { key: 'advances', label: 'سلفيات', fmt: sdg }, { key: 'late_deduction', label: 'تأخير', fmt: sdg },
     { key: 'net', label: 'الصافي', fmt: sdg }, { key: 'sign', label: 'التوقيع', fmt: () => '' }]} />)
 
   return (
     <>
-      <PageHeader title="المرتبات والسلف" subtitle="المرتب + نسبة المبيعات − الخصومات − السلف − التأخير" icon={<Banknote size={22} />}
+      <PageHeader title="المرتبات والسلفيات" icon={<Banknote size={22} />}
         actions={<>
           {can('payroll', 'create') && <button className="btn-ghost" onClick={() => setAdd('deduction')}><MinusCircle size={17} /> خصم</button>}
           {can('payroll', 'create') && <button className="btn-ghost" onClick={() => setAdd('advance')}><HandCoins size={17} /> سلفة</button>}
         </>} />
       <div className="flex items-center gap-3 mb-4">
-        <Tabs value={tab} onChange={setTab} items={[{ key: 'payroll', label: 'كشف المرتبات' }, { key: 'advances', label: 'السلف' }, { key: 'deductions', label: 'الخصومات' }]} />
+        <Tabs value={tab} onChange={setTab} items={[{ key: 'payroll', label: 'كشف المرتبات' }, { key: 'advances', label: 'السلفيات' }, { key: 'deductions', label: 'الخصومات' }]} />
         {tab === 'payroll' && <>
           <input type="month" className="input h-10 w-44" value={period} onChange={(e) => setPeriod(e.target.value)} />
-          {can('payroll', 'create') && <button className="btn-primary h-10" disabled={busy} onClick={generate}><RefreshCw size={16} /> احسب مرتبات {monthName(period)}</button>}
+          {can('payroll', 'create') && <button className="btn-primary h-10" disabled={busy} onClick={generate}><RefreshCw size={16} /> احتساب المرتبات {monthName(period)}</button>}
           {rows.length > 0 && <button className="btn-ghost h-10" onClick={printSheet}><Printer size={16} /> طباعة الكشف</button>}
         </>}
       </div>
@@ -54,12 +54,12 @@ export default function Payroll() {
           {rows.length > 0 && <div className="grid grid-cols-3 gap-4 mb-4">
             <Stat accent label="إجمالي الصافي" value={short(totalNet)} />
             <Stat label="إجمالي نسب المبيعات" value={short(rows.reduce((s: number, r: any) => s + Number(r.commission), 0))} tone="green" />
-            <Stat label="اتصرف" value={`${rows.filter((r: any) => r.status === 'paid').length} / ${rows.length}`} />
+            <Stat label="تم الصرف" value={`${rows.filter((r: any) => r.status === 'paid').length} / ${rows.length}`} />
           </div>}
           <div className="card overflow-hidden">
-            {pr.loading ? <Loading /> : !rows.length ? <Empty title="لسه محسبتش مرتبات الشهر ده" text="دوس «احسب المرتبات» وهتتجمع المبيعات والسلف والخصومات والتأخير لوحدها" /> : (
+            {pr.loading ? <Loading /> : !rows.length ? <Empty title="لم تُحتسب مرتبات هذا الشهر بعد" text="اضغط «احتساب المرتبات» لتُجمع المبيعات والسلفيات والخصومات والتأخير تلقائيًا" /> : (
               <table className="tbl">
-                <thead><tr><th>الموظف</th><th>الأساسي</th><th>مبيعاته</th><th>النسبة</th><th>خصومات</th><th>سلف</th><th>تأخير</th><th>الصافي</th><th>الحالة</th><th></th></tr></thead>
+                <thead><tr><th>الموظف</th><th>الأساسي</th><th>مبيعاته</th><th>النسبة</th><th>خصومات</th><th>سلفيات</th><th>تأخير</th><th>الصافي</th><th>الحالة</th><th></th></tr></thead>
                 <tbody>{rows.map((r: any) => (
                   <tr key={r.id}>
                     <td className="font-semibold">{r.employee_name}<div className="text-[11px] text-zinc-500">{r.job_title}</div></td>
@@ -91,7 +91,7 @@ export default function Payroll() {
                   <tr key={r.id}>
                     <td className="text-zinc-400">{date(r.advance_date ?? r.deduction_date)}</td><td className="font-semibold">{empName(r.employee_id)}</td>
                     <td><Money v={r.amount_sdg} className="font-bold" /></td><td className="text-zinc-400">{r.notes ?? r.reason}</td>
-                    <td>{r.payroll_id ? <Badge cls="bg-emerald-500/15 text-emerald-300">اتخصمت من المرتب</Badge> : <Badge cls="bg-amber-500/15 text-amber-300">هتتخصم الشهر ده</Badge>}</td>
+                    <td>{r.payroll_id ? <Badge cls="bg-emerald-500/15 text-emerald-300">خُصمت من المرتب</Badge> : <Badge cls="bg-amber-500/15 text-amber-300">ستُخصم هذا الشهر</Badge>}</td>
                   </tr>
                 ))}</tbody>
               </table>
@@ -112,11 +112,11 @@ function AddModal({ kind, emps, onClose }: { kind: 'advance' | 'deduction'; emps
   const save = async () => {
     const ok = await run(() => kind === 'advance'
       ? db.insert('salary_advances', { employee_id: f.employee_id, amount_sdg: Number(f.amount), notes: f.note || null, advance_date: f.d })
-      : db.insert('salary_deductions', { employee_id: f.employee_id, amount_sdg: Number(f.amount), reason: f.note || null, deduction_date: f.d }), 'اتسجل')
+      : db.insert('salary_deductions', { employee_id: f.employee_id, amount_sdg: Number(f.amount), reason: f.note || null, deduction_date: f.d }), 'تم التسجيل')
     if (ok) onClose()
   }
   return (
-    <Modal open onClose={onClose} width="max-w-md" title={kind === 'advance' ? 'سلفة لموظف' : 'خصم على موظف'} subtitle="هتتخصم تلقائياً من مرتب الشهر"
+    <Modal open onClose={onClose} width="max-w-md" title={kind === 'advance' ? 'سلفة لموظف' : 'خصم على موظف'} subtitle="ستُخصم تلقائيًا من مرتب الشهر"
       footer={<><button className="btn-ghost" onClick={onClose}>إلغاء</button><button className="btn-primary" disabled={busy || !f.employee_id || !(Number(f.amount) > 0)} onClick={save}>حفظ</button></>}>
       <div className="grid grid-cols-2 gap-3">
         <Field label="الموظف" className="col-span-2"><select className="input" value={f.employee_id} onChange={(e) => setF({ ...f, employee_id: e.target.value })}>

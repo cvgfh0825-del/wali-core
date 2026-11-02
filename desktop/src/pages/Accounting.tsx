@@ -25,7 +25,7 @@ export default function Accounting() {
 
   return (
     <>
-      <PageHeader title="المقبوضات والمدفوعات" subtitle="حركة الخزنة: تحصيل من العملاء ودفع للموردين" icon={<Wallet size={22} />}
+      <PageHeader title="المقبوضات والمدفوعات" icon={<Wallet size={22} />}
         actions={<>
           <button className="btn-ghost" onClick={() => downloadCSV('حركة الخزنة', rows, [{ key: 'pay_date', label: 'التاريخ' }, { key: 'direction', label: 'النوع' }, { key: 'amount_sdg', label: 'المبلغ' }, { key: 'customer_name', label: 'العميل' }, { key: 'supplier_name', label: 'المورد' }, { key: 'notes', label: 'البيان' }])}><Download size={17} /> CSV</button>
           {can('accounting', 'create') && <button className="btn-primary" onClick={() => setAdding(true)}><Plus size={18} /> حركة جديدة</button>}
@@ -100,7 +100,7 @@ function NewPayment({ onClose }: { onClose: () => void }) {
       [dir === 'in' ? 'customer_id' : 'supplier_id']: f.party || null,
       [dir === 'in' ? 'invoice_id' : 'purchase_id']: f.doc || null,
       amount_sdg: Number(f.amount), method: f.method, notes: f.notes || null, pay_date: f.pay_date,
-    } }), 'الحركة اتسجلت')
+    } }), 'سُجِّلت الحركة')
     if (r) onClose()
   }
   return (
@@ -111,12 +111,12 @@ function NewPayment({ onClose }: { onClose: () => void }) {
         <Field label={dir === 'in' ? 'العميل' : 'المورد'}><select className="input" value={f.party} onChange={(e) => setF({ ...f, party: e.target.value, doc: '' })}>
           <option value="">—</option>{(parties.data ?? []).map((p: any) => <option key={p.id} value={p.id}>{p.name} {Number(p.balance) > 0 ? `(${Math.round(p.balance).toLocaleString('en')})` : ''}</option>)}</select></Field>
         <Field label="عن فاتورة (اختياري)"><select className="input" value={f.doc} onChange={(e) => { const d = docs.data?.find((x: any) => x.id === e.target.value); setF({ ...f, doc: e.target.value, amount: d ? String(Math.round(d.remaining_sdg)) : f.amount }) }}>
-          <option value="">دفعة على الحساب</option>{(docs.data ?? []).map((d: any) => <option key={d.id} value={d.id}>{d.number} — باقي {Math.round(d.remaining_sdg).toLocaleString('en')}</option>)}</select></Field>
+          <option value="">دفعة تحت الحساب</option>{(docs.data ?? []).map((d: any) => <option key={d.id} value={d.id}>{d.number} — المتبقي {Math.round(d.remaining_sdg).toLocaleString('en')}</option>)}</select></Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="المبلغ (ج.س)"><input className="input num" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value.replace(/[^\d.]/g, '') })} /></Field>
           <Field label="التاريخ"><input type="date" className="input" value={f.pay_date} onChange={(e) => setF({ ...f, pay_date: e.target.value })} /></Field>
           <Field label="الطريقة"><select className="input" value={f.method} onChange={(e) => setF({ ...f, method: e.target.value })}>
-            <option value="cash">كاش</option><option value="bank">بنك</option><option value="transfer">تحويل</option><option value="cheque">شيك</option></select></Field>
+            <option value="cash">نقدًا</option><option value="bank">بنك</option><option value="transfer">تحويل</option><option value="cheque">شيك</option></select></Field>
           <Field label="البيان"><input className="input" value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} /></Field>
         </div>
       </div>

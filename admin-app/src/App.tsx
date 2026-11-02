@@ -36,7 +36,7 @@ const TZ = 'Africa/Khartoum'
 const todayStr = () => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date())
 const ago = (s: string) => {
   const d = (Date.now() - new Date(s).getTime()) / 1000
-  if (d < 60) return 'دلوقتي'
+  if (d < 60) return 'الآن'
   if (d < 3600) return `${Math.floor(d / 60)} د`
   if (d < 86400) return `${Math.floor(d / 3600)} س`
   return new Intl.DateTimeFormat('ar-EG-u-nu-latn', { timeZone: TZ, day: 'numeric', month: 'short' }).format(new Date(s))
@@ -56,7 +56,7 @@ const FILTERS = [
   { key: 'all', label: 'الكل' }, { key: 'unread', label: 'جديد' },
   { key: 'sales', label: 'المبيعات', types: ['invoices', 'payments'] },
   { key: 'stock', label: 'المخزن', types: ['products', 'stock_movements', 'delivery_permits', 'purchases'] },
-  { key: 'people', label: 'الموظفين', types: ['attendance', 'employees', 'salary_advances', 'salary_deductions', 'payrolls', 'profiles'] },
+  { key: 'people', label: 'الموظفون', types: ['attendance', 'employees', 'salary_advances', 'salary_deductions', 'payrolls', 'profiles'] },
   { key: 'money', label: 'الحسابات', types: ['expenses', 'exchange_rates', 'shareholders', 'shareholder_terms', 'shareholder_payouts'] },
 ]
 
@@ -103,7 +103,7 @@ function Setup({ onDone }: { onDone: (c: { url: string; key: string }) => void }
       <div className="pt-16 max-w-sm mx-auto">
         <Logo size={64} />
         <h1 className="font-display text-3xl font-black mt-6">إعداد أول مرة</h1>
-        <p className="text-zinc-400 mt-2">بيانات مشروع Supabase بتاع الشركة.</p>
+        <p className="text-zinc-400 mt-2">بيانات مشروع Supabase الخاص بالشركة.</p>
         <div className="space-y-3 mt-8">
           <input className="input" dir="ltr" placeholder="https://xxxx.supabase.co" value={url} onChange={(e) => setUrl(e.target.value.trim())} />
           <input className="input" dir="ltr" placeholder="anon key" value={key} onChange={(e) => setKey(e.target.value.trim())} />
@@ -123,18 +123,18 @@ function Login({ sb, onLogin }: { sb: SupabaseClient; onLogin: () => void }) {
     e.preventDefault(); setBusy(true); setErr('')
     const { error } = await sb.auth.signInWithPassword({ email: `${u.trim().toLowerCase()}@wali.local`, password: p })
     setBusy(false)
-    if (error) setErr('اسم المستخدم أو كلمة السر غلط'); else onLogin()
+    if (error) setErr('اسم المستخدم أو كلمة المرور غير صحيحة'); else onLogin()
   }
   return (
     <Shell>
       <form onSubmit={go} className="pt-20 max-w-sm mx-auto">
         <Logo size={72} />
         <div className="font-display text-[15px] font-black tracking-wide mt-6" dir="ltr">WALI<span className="text-brand-500">CORE</span></div>
-        <h1 className="font-display text-3xl font-black mt-1">لوحة الأدمن</h1>
-        <p className="text-zinc-400 mt-2">كل اللي بيحصل في والي بلازا — على موبايلك.</p>
+        <h1 className="font-display text-3xl font-black mt-1">لوحة مدير النظام</h1>
+        <p className="text-zinc-400 mt-2">كل ما يحدث في والي بلازا — على هاتفك.</p>
         <div className="space-y-3 mt-8">
           <input className="input" dir="ltr" placeholder="اسم المستخدم" autoCapitalize="none" value={u} onChange={(e) => setU(e.target.value)} />
-          <input className="input" dir="ltr" type="password" placeholder="كلمة السر" value={p} onChange={(e) => setP(e.target.value)} />
+          <input className="input" dir="ltr" type="password" placeholder="كلمة المرور" value={p} onChange={(e) => setP(e.target.value)} />
           {err && <div className="text-red-300 text-sm">{err}</div>}
           <button className="btn-primary w-full" disabled={busy || !u || !p}>{busy ? <Loader2 className="animate-spin" size={18} /> : 'دخول'}</button>
         </div>
@@ -148,7 +148,7 @@ function Blocked({ sb, onOut }: { sb: SupabaseClient; onOut: () => void }) {
     <Shell>
       <div className="pt-24 text-center max-w-sm mx-auto">
         <ShieldAlert size={48} className="mx-auto text-red-400" />
-        <h1 className="text-2xl font-black mt-4">التطبيق ده للأدمن بس</h1>
+        <h1 className="text-2xl font-black mt-4">هذا التطبيق لمدير النظام فقط</h1>
         <button className="btn-ghost mt-8" onClick={async () => { await sb.auth.signOut(); onOut() }}>خروج</button>
       </div>
     </Shell>
@@ -200,8 +200,8 @@ function InstallCard() {
     <button onClick={install} className="w-full mt-5 rounded-3xl border border-ink-600 bg-ink-900 p-4 flex items-center gap-3 text-right active:scale-[.98] transition">
       <span className="w-11 h-11 rounded-2xl bg-brand-500/15 text-brand-400 grid place-items-center"><Download size={20} /></span>
       <span className="flex-1">
-        <span className="block font-black">ثبّت التطبيق على الموبايل</span>
-        <span className="block text-[13px] text-zinc-400">يبقى ليه أيقونة على الشاشة ويفتح زي أي تطبيق</span>
+        <span className="block font-black">ثبّت التطبيق على الهاتف</span>
+        <span className="block text-[13px] text-zinc-400">تظهر له أيقونة على الشاشة ويُفتح كأي تطبيق</span>
       </span>
     </button>
   )
@@ -246,7 +246,7 @@ function PushCard({ sb, me }: { sb: SupabaseClient; me: Row }) {
       const j = sub.toJSON() as any
       await sb.from('push_subscriptions').upsert({ user_id: me.id, endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, user_agent: navigator.userAgent }, { onConflict: 'endpoint' })
       setState('on')
-    } catch (e: any) { alert('مقدرناش نفعّل الإشعارات: ' + e.message) } finally { setBusy(false) }
+    } catch (e: any) { alert('تعذّر تفعيل الإشعارات: ' + e.message) } finally { setBusy(false) }
   }
 
   if (state === 'on' || state === 'checking') return null
@@ -254,23 +254,23 @@ function PushCard({ sb, me }: { sb: SupabaseClient; me: Row }) {
     <div className="rounded-3xl border border-brand-500/40 bg-gradient-to-br from-brand-500/20 to-brand-500/5 p-5 mt-5">
       {state === 'install' ? (
         <>
-          <div className="flex items-center gap-2 font-black text-lg"><Smartphone size={20} className="text-brand-400" /> نزّل التطبيق على الآيفون</div>
+          <div className="flex items-center gap-2 font-black text-lg"><Smartphone size={20} className="text-brand-400" /> ثبّت التطبيق على الآيفون</div>
           <ol className="text-[14px] text-zinc-300 mt-3 space-y-2.5 leading-6">
-            <li className="flex gap-2"><span className="num text-brand-400 font-black">1</span> دوس على زرار المشاركة <Share size={16} className="inline text-sky-400" /> تحت في Safari</li>
-            <li className="flex gap-2"><span className="num text-brand-400 font-black">2</span> اختار «إضافة إلى الشاشة الرئيسية» <PlusSquare size={16} className="inline" /></li>
+            <li className="flex gap-2"><span className="num text-brand-400 font-black">1</span> اضغط زر المشاركة <Share size={16} className="inline text-sky-400" /> أسفل الشاشة في Safari</li>
+            <li className="flex gap-2"><span className="num text-brand-400 font-black">2</span> اختر «إضافة إلى الشاشة الرئيسية» <PlusSquare size={16} className="inline" /></li>
             <li className="flex gap-2"><span className="num text-brand-400 font-black">3</span> افتح التطبيق من الأيقونة وفعّل الإشعارات</li>
           </ol>
         </>
       ) : state === 'denied' && native ? (
-        <div className="text-[14px] leading-6">الإشعارات مقفولة. افتح <b>إعدادات الموبايل ← التطبيقات ← WALI CORE ← الإشعارات</b> وفعّلها، وبعدين ارجع للتطبيق.</div>
+        <div className="text-[14px] leading-6">الإشعارات معطّلة. افتح <b>إعدادات الهاتف ← التطبيقات ← WALI CORE ← الإشعارات</b> وفعّلها، ثم عُد إلى التطبيق.</div>
       ) : state === 'denied' ? (
-        <div className="text-[14px] leading-6">الإشعارات مقفولة. دوس على علامة القفل جنب الرابط فوق ← <b>الأذونات ← الإشعارات</b> وخليها «سماح»، أو من <b>إعدادات الموبايل ← التطبيقات ← والي بلازا ← الإشعارات</b>.</div>
+        <div className="text-[14px] leading-6">الإشعارات معطّلة. اضغط على علامة القفل بجوار الرابط في الأعلى ← <b>الأذونات ← الإشعارات</b> واجعلها «سماح»، أو من <b>إعدادات الهاتف ← التطبيقات ← والي بلازا ← الإشعارات</b>.</div>
       ) : state === 'unsupported' ? (
-        <div className="text-[14px] leading-6">المتصفح ده مش بيدعم الإشعارات. افتح الرابط من <b>Google Chrome</b>.</div>
+        <div className="text-[14px] leading-6">هذا المتصفح لا يدعم الإشعارات. افتح الرابط من <b>Google Chrome</b>.</div>
       ) : (
         <>
-          <div className="flex items-center gap-2 font-black text-lg"><BellRing size={20} className="text-brand-400" /> شغّل الإشعارات</div>
-          <p className="text-[14px] text-zinc-300 mt-1">عشان يوصلك كل حاجة بتحصل حتى والتطبيق مقفول.</p>
+          <div className="flex items-center gap-2 font-black text-lg"><BellRing size={20} className="text-brand-400" /> فعّل الإشعارات</div>
+          <p className="text-[14px] text-zinc-300 mt-1">لتصلك جميع الأحداث حتى والتطبيق مغلق.</p>
           <button className="btn-primary w-full mt-4" disabled={busy} onClick={enable}>{busy ? <Loader2 className="animate-spin" size={18} /> : 'تفعيل الإشعارات'}</button>
         </>
       )}
@@ -353,7 +353,7 @@ function Home({ sb, me, onOut }: { sb: SupabaseClient; me: Row; onOut: () => voi
         <Logo size={42} />
         <div className="flex-1">
           <div className="font-display font-black text-[15px]" dir="ltr">WALI<span className="text-brand-500">CORE</span></div>
-          <div className="text-[12px] text-zinc-400">أهلاً {me.full_name || me.username}</div>
+          <div className="text-[12px] text-zinc-400">مرحبًا {me.full_name || me.username}</div>
         </div>
         {unread > 0 && <button onClick={readAll} className="w-11 h-11 rounded-2xl bg-ink-800 border border-ink-600 flex items-center justify-center text-zinc-300"><CheckCheck size={18} /></button>}
         <button onClick={onOut} className="w-11 h-11 rounded-2xl bg-ink-800 border border-ink-600 flex items-center justify-center text-zinc-400"><LogOut size={18} /></button>
@@ -361,9 +361,9 @@ function Home({ sb, me, onOut }: { sb: SupabaseClient; me: Row; onOut: () => voi
 
       {stats && (
         <div className="grid grid-cols-3 gap-2.5 mt-5">
-          <StatBox icon={<TrendingUp size={16} />} label="مبيعات النهارده" value={short(stats.sales)} accent />
+          <StatBox icon={<TrendingUp size={16} />} label="مبيعات اليوم" value={short(stats.sales)} accent />
           <StatBox icon={<FileClock size={16} />} label="مبدئيات مفتوحة" value={stats.open_proformas} />
-          <StatBox icon={<DollarSign size={16} />} label="الريت" value={stats.rate_today ? fmt(stats.rate_today) : '—'} warn={!stats.rate_today} />
+          <StatBox icon={<DollarSign size={16} />} label="سعر الصرف" value={stats.rate_today ? fmt(stats.rate_today) : '—'} warn={!stats.rate_today} />
         </div>
       )}
 
@@ -381,7 +381,7 @@ function Home({ sb, me, onOut }: { sb: SupabaseClient; me: Row; onOut: () => voi
 
       <div className="mt-4 pb-8">
         {loading ? <div className="py-20 flex justify-center"><Loader2 className="animate-spin text-brand-500" /></div>
-          : !list.length ? <div className="py-20 text-center text-zinc-500"><Bell className="mx-auto mb-3" size={36} />مفيش إشعارات</div>
+          : !list.length ? <div className="py-20 text-center text-zinc-500"><Bell className="mx-auto mb-3" size={36} />لا توجد إشعارات</div>
           : groups.map(([day, items]) => (
             <div key={day} className="mb-5">
               <div className="text-[12px] font-bold text-zinc-500 mb-2 px-1">{day}</div>
@@ -444,7 +444,7 @@ function Detail({ sb, n, onClose }: { sb: SupabaseClient; n: Row; onClose: () =>
         {inv && (
           <div className="mt-4 space-y-2">
             <div className="flex justify-between text-sm"><span className="text-zinc-400">العميل</span><span>{inv.inv.customer_name ?? 'عميل نقدي'}</span></div>
-            <div className="flex justify-between text-sm"><span className="text-zinc-400">الريت</span><span className="num">{fmt(inv.inv.rate)}</span></div>
+            <div className="flex justify-between text-sm"><span className="text-zinc-400">سعر الصرف</span><span className="num">{fmt(inv.inv.rate)}</span></div>
             <div className="rounded-2xl border border-ink-700 divide-y divide-ink-700 mt-3">
               {inv.items.map((i) => (
                 <div key={i.id} className="flex justify-between gap-3 px-4 py-3 text-[13px]">

@@ -13,7 +13,7 @@ export default function Employees() {
   const active = (data ?? []).filter((e: any) => e.is_active)
   return (
     <>
-      <PageHeader title="الموظفين" subtitle={<>{active.length} موظف · إجمالي المرتبات الأساسية <Money v={active.reduce((s: number, e: any) => s + Number(e.base_salary), 0)} className="font-bold text-zinc-100" /></>} icon={<UserCog size={22} />}
+      <PageHeader title="الموظفون" subtitle={<>{active.length} موظف · إجمالي المرتبات الأساسية <Money v={active.reduce((s: number, e: any) => s + Number(e.base_salary), 0)} className="font-bold text-zinc-100" /></>} icon={<UserCog size={22} />}
         actions={can('hr', 'create') && <button className="btn-primary" onClick={() => setEdit({})}><Plus size={18} /> موظف جديد</button>} />
       {loading ? <Loading /> : !data?.length ? <div className="card"><Empty /></div> : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
@@ -56,7 +56,7 @@ function EmployeeForm({ e, onClose }: { e: Row; onClose: () => void }) {
       commission_pct: Number(f.commission_pct) || 0, commission_basis: f.commission_basis, user_id: f.user_id || null,
       hired_at: f.hired_at || null, is_active: !!f.is_active, notes: f.notes || null,
     }
-    const ok = await run(() => (e.id ? db.update('employees', e.id, body) : db.insert('employees', body)), 'اتحفظ')
+    const ok = await run(() => (e.id ? db.update('employees', e.id, body) : db.insert('employees', body)), 'تم الحفظ')
     if (ok) onClose()
   }
   return (
@@ -65,15 +65,15 @@ function EmployeeForm({ e, onClose }: { e: Row; onClose: () => void }) {
       <div className="grid grid-cols-2 gap-3">
         <Field label="الاسم *"><input className="input" autoFocus value={f.full_name} onChange={(x) => set('full_name', x.target.value)} /></Field>
         <Field label="الوظيفة"><input className="input" value={f.job_title ?? ''} onChange={(x) => set('job_title', x.target.value)} /></Field>
-        <Field label="الموبايل"><input className="input num" dir="ltr" value={f.phone ?? ''} onChange={(x) => set('phone', x.target.value)} /></Field>
+        <Field label="الهاتف"><input className="input num" dir="ltr" value={f.phone ?? ''} onChange={(x) => set('phone', x.target.value)} /></Field>
         <Field label="تاريخ التعيين"><input type="date" className="input" value={f.hired_at ?? ''} onChange={(x) => set('hired_at', x.target.value)} /></Field>
         <Field label="المرتب الأساسي (ج.س)"><input className="input num" value={f.base_salary} onChange={(x) => set('base_salary', x.target.value.replace(/[^\d.]/g, ''))} /></Field>
         <Field label="نسبة من المبيعات %"><input className="input num" value={f.commission_pct} onChange={(x) => set('commission_pct', x.target.value.replace(/[^\d.]/g, ''))} /></Field>
         <Field label="النسبة محسوبة من"><select className="input" value={f.commission_basis} onChange={(x) => set('commission_basis', x.target.value)}>
-          <option value="own">مبيعاته هو بس</option><option value="total">إجمالي مبيعات الشركة</option></select></Field>
-        <Field label="حساب الدخول المربوط" hint="عشان يسجّل حضور ومبيعاته تتحسبله"><select className="input" value={f.user_id ?? ''} onChange={(x) => set('user_id', x.target.value)}>
+          <option value="own">مبيعاته الخاصة فقط</option><option value="total">إجمالي مبيعات الشركة</option></select></Field>
+        <Field label="حساب الدخول المربوط" hint="ليتمكن من تسجيل الحضور وتُحتسب له مبيعاته"><select className="input" value={f.user_id ?? ''} onChange={(x) => set('user_id', x.target.value)}>
           <option value="">بدون</option>{(users.data ?? []).map((u: any) => <option key={u.id} value={u.id}>{u.username} — {u.full_name}</option>)}</select></Field>
-        <Field label="الحالة"><select className="input" value={f.is_active ? '1' : '0'} onChange={(x) => set('is_active', x.target.value === '1')}><option value="1">على رأس العمل</option><option value="0">ساب الشغل</option></select></Field>
+        <Field label="الحالة"><select className="input" value={f.is_active ? '1' : '0'} onChange={(x) => set('is_active', x.target.value === '1')}><option value="1">على رأس العمل</option><option value="0">ترك العمل</option></select></Field>
         <Field label="ملاحظات"><input className="input" value={f.notes ?? ''} onChange={(x) => set('notes', x.target.value)} /></Field>
       </div>
     </Modal>

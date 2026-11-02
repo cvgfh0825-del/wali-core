@@ -38,7 +38,7 @@ export default function Products() {
           <button className="btn-ghost" onClick={() => downloadCSV('الأصناف', rows, [
             { key: 'code', label: 'الكود' }, { key: 'barcode', label: 'الباركود' }, { key: 'name', label: 'الاسم' }, { key: 'model', label: 'الموديل' },
             { key: 'category_name', label: 'القسم' }, { key: 'cost_usd', label: 'التكلفة $' }, { key: 'price_usd', label: 'السعر $' },
-            { key: 'price_sdg', label: 'السعر ج.س' }, { key: 'qty_on_hand', label: 'الباقي' }, { key: 'sold_qty', label: 'المباع' }])}><Download size={17} /> CSV</button>
+            { key: 'price_sdg', label: 'السعر ج.س' }, { key: 'qty_on_hand', label: 'المتبقي' }, { key: 'sold_qty', label: 'المباع' }])}><Download size={17} /> CSV</button>
           {can('products', 'print') && <button className="btn-ghost" onClick={() => setLabels(true)}><BarcodeIcon size={17} /> طباعة باركود</button>}
           {can('products', 'create') && <button className="btn-ghost" onClick={() => setCatsOpen(true)}><Tags size={17} /> الأقسام</button>}
           {can('products', 'create') && <button className="btn-primary" onClick={() => setEdit({})}><Plus size={18} /> صنف جديد</button>}
@@ -50,18 +50,18 @@ export default function Products() {
           <option value="">كل الأقسام</option>
           {(categories.data ?? []).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <label className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer"><input type="checkbox" className="accent-orange-500 w-4 h-4" checked={low} onChange={(e) => setLow(e.target.checked)} /> اللي قربت تخلص بس</label>
+        <label className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer"><input type="checkbox" className="accent-orange-500 w-4 h-4" checked={low} onChange={(e) => setLow(e.target.checked)} /> القاربة على النفاد فقط</label>
         <div className="mr-auto"><Tabs value={view} onChange={setView} items={[{ key: 'list', label: <List size={16} /> }, { key: 'grid', label: <LayoutGrid size={16} /> }]} /></div>
       </div>
 
-      {loading ? <Loading /> : !rows.length ? <div className="card"><Empty text="ضيف أول صنف أو غيّر البحث" /></div> : view === 'grid' ? (
+      {loading ? <Loading /> : !rows.length ? <div className="card"><Empty text="أضف أول صنف أو غيّر البحث" /></div> : view === 'grid' ? (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-4">
           {rows.map((p: any) => (
             <button key={p.id} onClick={() => can('products', 'edit') && setEdit(p)} className="card overflow-hidden text-right hover:border-brand-500/40 transition group">
               <div className="aspect-[4/3] bg-ink-900 relative overflow-hidden">
                 <ProductImage p={p} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" artClassName="w-full h-full p-8" />
                 <span className="absolute top-2 left-2 chip bg-ink-950/80 backdrop-blur num">{p.code}</span>
-                {Number(p.qty_on_hand) <= Number(p.min_qty) && <span className="absolute top-2 right-2 chip bg-red-500/80 text-white">قرب يخلص</span>}
+                {Number(p.qty_on_hand) <= Number(p.min_qty) && <span className="absolute top-2 right-2 chip bg-red-500/80 text-white">قارب على النفاد</span>}
               </div>
               <div className="p-4">
                 <div className="font-semibold truncate">{p.name}</div>
@@ -78,7 +78,7 @@ export default function Products() {
         <div className="card overflow-hidden">
           <div className="max-h-[calc(100vh-280px)] overflow-auto">
             <table className="tbl">
-              <thead><tr><th className="w-14"></th><th>الكود</th><th>الصنف</th><th>القسم</th><th>التكلفة</th><th>الربح</th><th>السعر $</th><th>السعر ج.س</th><th>الكلي</th><th>المباع</th><th>المسحوب</th><th>الباقي</th><th></th></tr></thead>
+              <thead><tr><th className="w-14"></th><th>الكود</th><th>الصنف</th><th>القسم</th><th>التكلفة</th><th>الربح</th><th>السعر $</th><th>السعر ج.س</th><th>الكلي</th><th>المباع</th><th>المسحوب</th><th>المتبقي</th><th></th></tr></thead>
               <tbody>
                 {rows.map((p: any) => (
                   <tr key={p.id}>
@@ -166,7 +166,7 @@ function ProductForm({ p, cats, onClose }: { p: Row; cats: Row[]; onClose: () =>
         rememberImage(id, Number(v), f.image || null)
       }
       return true
-    }, isNew ? 'الصنف اتضاف' : 'اتحفظ التعديل')
+    }, isNew ? 'أُضيف الصنف' : 'حُفظ التعديل')
     if (ok) onClose()
   }
 
@@ -179,7 +179,7 @@ function ProductForm({ p, cats, onClose }: { p: Row; cats: Row[]; onClose: () =>
             {f.image ? <img src={f.image} className="w-full h-full object-cover" /> : <div className="h-full flex flex-col items-center justify-center text-zinc-500 gap-2"><ImagePlus size={30} /><span className="text-sm">صورة الصنف</span></div>}
             <input type="file" accept="image/*" className="hidden" onChange={async (e) => { const file = e.target.files?.[0]; if (file) set('image', await resizeImage(file)) }} />
           </label>
-          {f.image && <button className="text-[12px] text-red-300 mt-2 flex items-center gap-1" onClick={() => set('image', null)}><Trash2 size={13} /> شيل الصورة</button>}
+          {f.image && <button className="text-[12px] text-red-300 mt-2 flex items-center gap-1" onClick={() => set('image', null)}><Trash2 size={13} /> إزالة الصورة</button>}
           {(f.barcode || f.code) && <div className="mt-4 bg-white rounded-xl p-3 text-center"><Barcode value={f.barcode || f.code} height={40} /><div className="text-black text-[11px] num">{f.barcode || f.code}</div></div>}
         </div>
         <div className="space-y-4">
@@ -203,11 +203,11 @@ function ProductForm({ p, cats, onClose }: { p: Row; cats: Row[]; onClose: () =>
               <label className="flex items-center gap-2 text-[13px] text-zinc-300"><input type="checkbox" className="accent-orange-500" checked={f.auto_price} onChange={(e) => set('auto_price', e.target.checked)} /> السعر = التكلفة + نسبة الربح</label>
             </div>
             <div className="grid grid-cols-3 gap-3">
-              <Field label="التكلفة النهائية $" hint="بتتحدث لوحدها مع كل مشتريات"><input className="input num" value={f.cost_usd} onChange={(e) => set('cost_usd', e.target.value.replace(/[^\d.]/g, ''))} /></Field>
+              <Field label="التكلفة النهائية $" hint="تُحدَّث تلقائيًا مع كل عملية شراء"><input className="input num" value={f.cost_usd} onChange={(e) => set('cost_usd', e.target.value.replace(/[^\d.]/g, ''))} /></Field>
               <Field label="نسبة الربح %"><input className="input num" value={f.margin_pct} onChange={(e) => set('margin_pct', e.target.value.replace(/[^\d.]/g, ''))} /></Field>
               <Field label="سعر البيع $"><input className="input num" disabled={f.auto_price} value={f.auto_price ? price : f.price_usd} onChange={(e) => set('price_usd', e.target.value.replace(/[^\d.]/g, ''))} /></Field>
             </div>
-            <div className="flex justify-between text-sm"><span className="text-zinc-400">بالجنيه على ريت النهارده</span><Money v={price * (rate ?? 0)} className="font-bold text-brand-300" /></div>
+            <div className="flex justify-between text-sm"><span className="text-zinc-400">بالجنيه وفق سعر صرف اليوم</span><Money v={price * (rate ?? 0)} className="font-bold text-brand-300" /></div>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <Field label="حد التنبيه (أقل كمية)"><input className="input num" value={f.min_qty} onChange={(e) => set('min_qty', e.target.value.replace(/[^\d.]/g, ''))} /></Field>
@@ -230,13 +230,13 @@ function CategoriesModal({ open, onClose }: { open: boolean; onClose: () => void
     <Modal open={open} onClose={onClose} title="أقسام المنتجات" width="max-w-lg">
       <div className="flex gap-2 mb-4">
         <input className="input" placeholder="اسم القسم الجديد" value={name} onChange={(e) => setName(e.target.value)} />
-        <button className="btn-primary" disabled={!name.trim()} onClick={async () => { await run(() => db.insert('categories', { name: name.trim(), sort: (data?.length ?? 0) + 1 }), 'القسم اتضاف'); setName(''); reload() }}><Plus size={17} /> إضافة</button>
+        <button className="btn-primary" disabled={!name.trim()} onClick={async () => { await run(() => db.insert('categories', { name: name.trim(), sort: (data?.length ?? 0) + 1 }), 'أُضيف القسم'); setName(''); reload() }}><Plus size={17} /> إضافة</button>
       </div>
       <div className="space-y-1 max-h-96 overflow-auto">
         {(data ?? []).map((c: any) => (
           <div key={c.id} className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-ink-800">
             <span>{c.name}</span>
-            {can('settings', 'edit') && <button className="p-1.5 text-zinc-500 hover:text-red-300" onClick={async () => { await run(() => db.remove('categories', c.id), 'اتحذف'); reload() }}><Trash2 size={15} /></button>}
+            {can('settings', 'edit') && <button className="p-1.5 text-zinc-500 hover:text-red-300" onClick={async () => { await run(() => db.remove('categories', c.id), 'تم الحذف'); reload() }}><Trash2 size={15} /></button>}
           </div>
         ))}
       </div>
@@ -251,7 +251,7 @@ function LabelsModal({ open, onClose, products }: { open: boolean; onClose: () =
   const list = products.filter((p) => !term || p.name.includes(term) || String(p.code).includes(term))
   const chosen = products.filter((p) => counts[p.id] > 0).map((p) => ({ p, count: counts[p.id] }))
   return (
-    <Modal open={open} onClose={onClose} title="طباعة ملصقات باركود" subtitle="اختار الأصناف وعدد الملصقات لكل صنف (3 في الصف على ورق A4)" width="max-w-2xl"
+    <Modal open={open} onClose={onClose} title="طباعة ملصقات باركود" subtitle="اختر الأصناف وعدد الملصقات لكل صنف (3 في الصف على ورق A4)" width="max-w-2xl"
       footer={<><span className="ml-auto text-sm text-zinc-400 num">{chosen.reduce((s, c) => s + c.count, 0)} ملصق</span>
         <button className="btn-primary" disabled={!chosen.length} onClick={() => printDoc(<LabelsDoc items={chosen} settings={settings} />)}><Printer size={17} /> طباعة</button></>}>
       <SearchBox value={term} onChange={setTerm} className="mb-3" />
@@ -259,7 +259,7 @@ function LabelsModal({ open, onClose, products }: { open: boolean; onClose: () =
         {list.map((p) => (
           <div key={p.id} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-ink-800">
             <span className="num text-zinc-500 w-14">{p.code}</span><span className="flex-1 truncate">{p.name}</span>
-            <button className="text-[12px] text-brand-400" onClick={() => setCounts((c) => ({ ...c, [p.id]: Math.max(1, Number(p.qty_on_hand)) }))}>بعدد المخزن</button>
+            <button className="text-[12px] text-brand-400" onClick={() => setCounts((c) => ({ ...c, [p.id]: Math.max(1, Number(p.qty_on_hand)) }))}>بعدد المخزون</button>
             <input className="input h-9 w-20 num text-center" value={counts[p.id] ?? ''} placeholder="0" onChange={(e) => setCounts((c) => ({ ...c, [p.id]: Number(e.target.value.replace(/\D/g, '')) || 0 }))} />
           </div>
         ))}

@@ -8,7 +8,7 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const mig = (f) => readFileSync(path.join(here, '../../supabase/migrations', f), 'utf8')
 const db = new PGlite()
 await db.exec(readFileSync(path.join(here, '../src/demo/bootstrap.sql'), 'utf8'))
-for (const f of ['0001_core.sql', '0002_logic.sql', '0003_security_notify.sql', '0005_returns.sql', '0006_backup.sql', '0007_product_images.sql']) {
+for (const f of ['0001_core.sql', '0002_logic.sql', '0003_security_notify.sql', '0005_returns.sql', '0006_backup.sql', '0007_product_images.sql', '0008_fusha_messages.sql']) {
   try { await db.exec(mig(f)); console.log('✔', f) }
   catch (e) { console.error('✘', f, e.message, e.position ?? ''); process.exit(1) }
 }
@@ -128,7 +128,7 @@ await expectErr(() => one(`select cancel_purchase($1, 'x')`, [pur2.id]), 'متت
 
 // تسوية ونقص مخزون
 await one(`select adjust_stock($1, 1, 'جرد')`, [p1])
-ok(Number((await one(`select count(*) c from notifications where title like 'نقص مخزون%'`)).c) >= 1, 'إشعار نقص المخزون')
+ok(Number((await one(`select count(*) c from notifications where title like 'انخفاض المخزون%'`)).c) >= 1, 'إشعار نقص المخزون')
 await db.query(`update products set qty_on_hand = 999 where id=$1`, [p1])
 ok(Number((await one(`select qty_on_hand from products where id=$1`, [p1])).qty_on_hand) === 1, 'الكمية متتعدلش مباشرة')
 

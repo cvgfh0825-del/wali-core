@@ -9,7 +9,7 @@ import { AreaChart, BarList } from '../components/charts'
 import { ProductImage } from '../components/ProductImage'
 import { daysAgo, today, short, ago, qty, date } from '../lib/format'
 
-const RANGES = { '7': 'أسبوع', '30': 'شهر', '90': '3 شهور' } as const
+const RANGES = { '7': 'أسبوع', '30': 'شهر', '90': '3 أشهر' } as const
 
 export default function Dashboard() {
   const { db, me, can, isAdmin, settings } = useApp()
@@ -20,7 +20,7 @@ export default function Dashboard() {
   const notes = useLoad(() => isAdmin ? db.list('notifications', { order: [{ col: 'created_at', asc: false }], limit: 7 }) : Promise.resolve([]), [], ['notifications'])
 
   const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Africa/Khartoum', hour: 'numeric', hour12: false }).format(new Date()))
-  const greet = hour < 12 ? 'صباح الخير' : hour < 18 ? 'مساء النور' : 'مساء الخير'
+  const greet = hour < 12 ? 'صباح الخير' : hour < 18 ? 'مساء الخير' : 'مساء الخير'
   const d = data
   const profit = d ? d.sales - d.cogs - d.expenses : 0
 
@@ -34,7 +34,6 @@ export default function Dashboard() {
           <div>
             <div className="text-zinc-400 text-sm">{new Intl.DateTimeFormat('ar-EG-u-nu-latn', { timeZone: 'Africa/Khartoum', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date())}</div>
             <h1 className="font-display text-3xl font-black mt-1">{greet}، {firstName(me.full_name || me.username)}</h1>
-            <p className="text-zinc-400 mt-2">ده ملخص شغل {settings.company_name ?? 'والي بلازا'} — {RANGES[range]} آخر.</p>
           </div>
           <div className="flex items-center gap-2">
             {can('sales', 'create') && <Link to="/sales" className="btn-primary h-12 px-5"><ShoppingCart size={18} /> فاتورة جديدة</Link>}
@@ -53,8 +52,8 @@ export default function Dashboard() {
           {d.limited ? (
           <div className="grid grid-cols-4 gap-4">
             <Stat accent label="مبيعاتك" value={short(d.sales)} sub={`${d.sales_count} فاتورة نهائية${d.returns ? ` · مرتجع ${short(d.returns)}` : ''}`} icon={<TrendingUp size={20} />} />
-            <Stat label="مبدئيات مفتوحة في المعرض" value={d.open_proformas} icon={<FileClock size={20} />} tone="amber" />
-            <Stat label="أصناف قربت تخلص" value={d.low_stock} icon={<AlertTriangle size={20} />} tone={d.low_stock ? 'red' : 'green'} />
+            <Stat label="فواتير مبدئية مفتوحة في المعرض" value={d.open_proformas} icon={<FileClock size={20} />} tone="amber" />
+            <Stat label="أصناف قاربت على النفاد" value={d.low_stock} icon={<AlertTriangle size={20} />} tone={d.low_stock ? 'red' : 'green'} />
             <Stat label="الأصناف المتاحة" value={d.products_count} sub={`${qty(d.stock_units)} قطعة`} icon={<Package size={20} />} />
           </div>
           ) : (
@@ -62,7 +61,7 @@ export default function Dashboard() {
             <Stat accent label="المبيعات" value={short(d.sales)} sub={`${d.sales_count} فاتورة نهائية${d.returns ? ` · مرتجع ${short(d.returns)}` : ''}`} icon={<TrendingUp size={20} />} />
             <Stat label="صافي الربح التقريبي" value={short(profit)} sub="المبيعات − التكلفة − المصروفات" icon={<Coins size={20} />} tone={profit >= 0 ? 'green' : 'red'} />
             <Stat label="قيمة المخزون" value={short(d.stock_value_sdg)} sub={`${qty(d.stock_units)} قطعة · ${d.products_count} صنف`} icon={<Package size={20} />} />
-            <Stat label="مستحقات على العملاء" value={short(d.receivables)} sub={`علينا للموردين ${short(d.payables)}`} icon={<HandCoins size={20} />} tone="amber" />
+            <Stat label="مستحقات على العملاء" value={short(d.receivables)} sub={`مستحق للموردين ${short(d.payables)}`} icon={<HandCoins size={20} />} tone="amber" />
           </div>
           )}
 
@@ -74,24 +73,24 @@ export default function Dashboard() {
                   <div className="text-[13px] text-zinc-500">بالجنيه السوداني</div>
                 </div>
                 {!d.limited && <div className="text-left">
-                  <div className="text-[12px] text-zinc-500">اتحصّل فعلاً</div>
+                  <div className="text-[12px] text-zinc-500">المُحصَّل فعليًا</div>
                   <Money v={d.collected} className="font-bold" />
                 </div>}
               </div>
               <AreaChart data={(d.daily ?? []).map((x: any) => ({ label: x.day.slice(5).split('-').reverse().join('/'), value: Number(x.sales) }))} />
             </div>
             <div className="card p-6">
-              <div className="font-bold mb-4">الأكثر مبيعاً</div>
+              <div className="font-bold mb-4">الأكثر مبيعًا</div>
               {d.top_products?.length ? (
                 <BarList items={d.top_products.map((p: any) => ({ label: p.name, sub: `${qty(p.qty)} قطعة`, value: Number(p.total) }))} />
-              ) : <Empty title="لسه مفيش مبيعات" />}
+              ) : <Empty title="لا توجد مبيعات بعد" />}
             </div>
           </div>
 
           <div className="grid grid-cols-4 gap-4">
             <MiniStat to="/invoices?tab=proforma" icon={<FileClock size={18} />} label="فواتير مبدئية مفتوحة" value={d.open_proformas} sub={<Money v={d.open_proformas_total} />} />
-            <MiniStat to="/deliveries" icon={<Truck size={18} />} label="أذونات منتظرة التسليم" value={d.pending_deliveries} />
-            <MiniStat to="/products?low=1" icon={<AlertTriangle size={18} />} label="أصناف قربت تخلص" value={d.low_stock} warn={d.low_stock > 0} />
+            <MiniStat to="/deliveries" icon={<Truck size={18} />} label="أذونات بانتظار التسليم" value={d.pending_deliveries} />
+            <MiniStat to="/products?low=1" icon={<AlertTriangle size={18} />} label="أصناف قاربت على النفاد" value={d.low_stock} warn={d.low_stock > 0} />
             {!d.limited && <MiniStat to="/expenses" icon={<Receipt size={18} />} label="المصروفات" value={short(d.expenses)} sub={`مشتريات ${short(d.purchases)}`} />}
           </div>
         </>
@@ -114,19 +113,19 @@ export default function Dashboard() {
         )}
         {can('sales') && (
           <div className="card p-6">
-            <div className="flex items-center justify-between mb-4"><div className="font-bold">مبدئيات مستنية</div><Link to="/invoices?tab=proforma" className="text-[13px] text-brand-400 flex items-center gap-1">الكل <ArrowLeft size={14} /></Link></div>
+            <div className="flex items-center justify-between mb-4"><div className="font-bold">فواتير مبدئية معلّقة</div><Link to="/invoices?tab=proforma" className="text-[13px] text-brand-400 flex items-center gap-1">الكل <ArrowLeft size={14} /></Link></div>
             {(proformas.data ?? []).length ? (proformas.data ?? []).map((i: any) => (
               <Link to={`/invoices?open=${i.id}`} key={i.id} className="flex items-center gap-3 p-2 rounded-xl hover:bg-ink-800">
                 <div className="w-10 h-10 rounded-lg bg-amber-500/10 text-amber-300 flex items-center justify-center"><FileClock size={18} /></div>
                 <div className="flex-1 min-w-0"><div className="text-sm truncate">{i.customer_name ?? 'عميل نقدي'}</div><div className="text-[11px] text-zinc-500 num">{i.number} · {i.salesperson_name}</div></div>
                 <Money v={i.total_sdg} className="text-sm font-bold" />
               </Link>
-            )) : <Empty title="مفيش مبدئيات مفتوحة" />}
+            )) : <Empty title="لا توجد فواتير مبدئية مفتوحة" />}
           </div>
         )}
         {isAdmin ? (
           <div className="card p-6">
-            <div className="flex items-center justify-between mb-4"><div className="font-bold">آخر اللي حصل</div><Link to="/notifications" className="text-[13px] text-brand-400 flex items-center gap-1">الكل <ArrowLeft size={14} /></Link></div>
+            <div className="flex items-center justify-between mb-4"><div className="font-bold">آخر الأحداث</div><Link to="/notifications" className="text-[13px] text-brand-400 flex items-center gap-1">الكل <ArrowLeft size={14} /></Link></div>
             <div className="relative space-y-3 before:absolute before:right-[7px] before:top-2 before:bottom-2 before:w-px before:bg-ink-600">
               {(notes.data ?? []).map((n: any) => (
                 <div key={n.id} className="relative pr-6">

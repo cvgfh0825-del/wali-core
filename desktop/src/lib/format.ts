@@ -39,7 +39,7 @@ export const monthName = (p: string) =>
 
 export const ago = (s: string) => {
   const diff = (Date.now() - new Date(s).getTime()) / 1000
-  if (diff < 60) return 'دلوقتي'
+  if (diff < 60) return 'الآن'
   if (diff < 3600) return `من ${Math.floor(diff / 60)} دقيقة`
   if (diff < 86400) return `من ${Math.floor(diff / 3600)} ساعة`
   if (diff < 86400 * 7) return `من ${Math.floor(diff / 86400)} يوم`
@@ -48,20 +48,20 @@ export const ago = (s: string) => {
 
 export const STATUS: Record<string, { label: string; cls: string }> = {
   open: { label: 'مبدئية مفتوحة', cls: 'bg-amber-500/15 text-amber-300' },
-  converted: { label: 'اتحولت لنهائية', cls: 'bg-sky-500/15 text-sky-300' },
+  converted: { label: 'حُوِّلت إلى نهائية', cls: 'bg-sky-500/15 text-sky-300' },
   posted: { label: 'نهائية', cls: 'bg-emerald-500/15 text-emerald-300' },
   cancelled: { label: 'ملغية', cls: 'bg-red-500/15 text-red-300' },
-  pending: { label: 'منتظر التسليم', cls: 'bg-amber-500/15 text-amber-300' },
-  delivered: { label: 'اتسلم', cls: 'bg-emerald-500/15 text-emerald-300' },
+  pending: { label: 'بانتظار التسليم', cls: 'bg-amber-500/15 text-amber-300' },
+  delivered: { label: 'تم التسليم', cls: 'bg-emerald-500/15 text-emerald-300' },
   draft: { label: 'مسودة', cls: 'bg-zinc-500/15 text-zinc-300' },
-  paid: { label: 'اتصرف', cls: 'bg-emerald-500/15 text-emerald-300' },
+  paid: { label: 'تم الصرف', cls: 'bg-emerald-500/15 text-emerald-300' },
 }
 export const PAY: Record<string, { label: string; cls: string }> = {
   cash: { label: 'مدفوعة', cls: 'bg-emerald-500/15 text-emerald-300' },
   credit: { label: 'آجل', cls: 'bg-red-500/15 text-red-300' },
   partial: { label: 'دفع جزئي', cls: 'bg-amber-500/15 text-amber-300' },
 }
-export const METHOD: Record<string, string> = { cash: 'كاش', bank: 'بنك', transfer: 'تحويل', cheque: 'شيك' }
+export const METHOD: Record<string, string> = { cash: 'نقدًا', bank: 'بنك', transfer: 'تحويل', cheque: 'شيك' }
 
 export function downloadCSV(name: string, rows: Record<string, any>[], cols: { key: string; label: string }[]) {
   const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`

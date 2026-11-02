@@ -15,20 +15,20 @@ export default function Rates() {
   const change = first && rate ? ((rate - Number(first.rate)) / Number(first.rate)) * 100 : 0
   return (
     <>
-      <PageHeader title="سعر الدولار" subtitle="سجل الريت اليومي — كل فاتورة بتحفظ الريت بتاع يومها" icon={<DollarSign size={22} />} />
+      <PageHeader title="سعر الدولار" icon={<DollarSign size={22} />} />
       <div className="grid grid-cols-3 gap-4 mb-5">
-        <Stat accent label="ريت النهارده" value={rate ? num(rate, 2) : '—'} sub="جنيه سوداني للدولار" icon={<DollarSign size={20} />} />
-        <Stat label="التغيّر من أول السجل" value={`${change >= 0 ? '+' : ''}${num(change, 1)}%`} tone={change > 0 ? 'red' : 'green'} sub={first ? `من ${date(first.rate_date)}` : ''} />
-        <Stat label="أيام متسجلة" value={daily.length} />
+        <Stat accent label="سعر صرف اليوم" value={rate ? num(rate, 2) : '—'} sub="جنيه سوداني للدولار" icon={<DollarSign size={20} />} />
+        <Stat label="التغيّر منذ بداية السجل" value={`${change >= 0 ? '+' : ''}${num(change, 1)}%`} tone={change > 0 ? 'red' : 'green'} sub={first ? `من ${date(first.rate_date)}` : ''} />
+        <Stat label="أيام مسجَّلة" value={daily.length} />
       </div>
       <div className="card p-6 mb-5">
-        <div className="font-bold mb-4">حركة الريت</div>
+        <div className="font-bold mb-4">حركة سعر الصرف</div>
         {daily.length > 1 ? <AreaChart data={daily.map((d) => ({ label: d.rate_date.slice(5).split('-').reverse().join('/'), value: Number(d.rate) }))} /> : <Empty />}
       </div>
       <div className="card overflow-hidden">
         {loading ? <Loading /> : (
           <table className="tbl">
-            <thead><tr><th>اليوم</th><th>الوقت</th><th>الريت</th><th>كتبه</th><th>ملاحظة</th></tr></thead>
+            <thead><tr><th>اليوم</th><th>الوقت</th><th>سعر الصرف</th><th>سجّله</th><th>ملاحظة</th></tr></thead>
             <tbody>{rows.slice(0, 60).map((r: any) => (
               <tr key={r.id}><td>{date(r.rate_date)}</td><td className="text-zinc-400">{time(r.created_at)}</td><td className="num font-bold text-brand-300">{num(r.rate, 2)}</td><td className="text-zinc-400">{r.created_by_name}</td><td className="text-zinc-500">{r.note}</td></tr>
             ))}</tbody>

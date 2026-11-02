@@ -27,7 +27,7 @@ export default function Reports() {
         <div key={a as string} style={{ background: '#f4f4f4', borderRadius: 8, padding: 10 }}><div style={{ color: '#666' }}>{a}</div><div style={{ fontWeight: 900, fontSize: 16 }}>{sdg(b)}</div></div>))}
     </div>}
     rows={r.shareholders} cols={[{ key: 'name', label: 'المساهم' }, { key: 'profit_pct', label: 'النسبة %', fmt: (v) => num(v, 2) },
-      { key: 'profit_share', label: 'نصيبه من الربح', fmt: sdg }, { key: 'received', label: 'استلم خلال السنة', fmt: sdg }, { key: 'remaining', label: 'الباقي له', fmt: sdg }]} />)
+      { key: 'profit_share', label: 'نصيبه من الربح', fmt: sdg }, { key: 'received', label: 'المستلَم خلال السنة', fmt: sdg }, { key: 'remaining', label: 'المتبقي له', fmt: sdg }]} />)
 
   // تحليل المبيعات حسب الموظف والصنف
   const bySeller = Object.values((sales.data ?? []).reduce((m: any, i: any) => { const k = i.salesperson_name ?? '—'; m[k] = m[k] ?? { label: k, value: 0, n: 0 }; m[k].value += Number(i.total_sdg); m[k].n++; return m }, {})) as any[]
@@ -64,12 +64,12 @@ export default function Reports() {
           </div>
           <div className="card overflow-hidden">
             <div className="px-6 py-4 border-b border-ink-700 flex items-center justify-between">
-              <div><div className="font-bold">نصيب المساهمين من أرباح {year}</div><div className="text-[13px] text-zinc-500">النصيب = صافي الربح × نسبته — وبيتخصم منه اللي استلمه شهرياً</div></div>
-              <div className="text-sm">اتصرف للمساهمين خلال السنة: <Money v={r.shareholder_paid} className="font-bold" /></div>
+              <div><div className="font-bold">نصيب المساهمين من أرباح {year}</div><div className="text-[13px] text-zinc-500">النصيب = صافي الربح × نسبته — ويُخصم منه ما استلمه شهريًا</div></div>
+              <div className="text-sm">المصروف للمساهمين خلال السنة: <Money v={r.shareholder_paid} className="font-bold" /></div>
             </div>
             {!r.shareholders?.length ? <Empty /> : (
               <table className="tbl">
-                <thead><tr><th>المساهم</th><th>نسبته من الأرباح</th><th>نصيبه</th><th>استلم (مرتب + نسبة مبيعات)</th><th>الباقي له / عليه</th></tr></thead>
+                <thead><tr><th>المساهم</th><th>نسبته من الأرباح</th><th>نصيبه</th><th>المستلَم (مرتب + نسبة مبيعات)</th><th>المتبقي له / عليه</th></tr></thead>
                 <tbody>{r.shareholders.map((s: any) => (
                   <tr key={s.id}><td className="font-semibold">{s.name}</td><td className="num">{num(s.profit_pct, 2)}%</td><td><Money v={s.profit_share} className="font-bold" /></td>
                     <td><Money v={s.received} /></td><td><Money v={s.remaining} className={`font-black ${s.remaining >= 0 ? 'text-emerald-300' : 'text-red-300'}`} /></td></tr>

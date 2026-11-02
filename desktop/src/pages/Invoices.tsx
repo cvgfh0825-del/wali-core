@@ -7,7 +7,7 @@ import { printDoc, InvoiceDoc } from '../components/Print'
 import { STATUS, PAY, date, dateTime, sdg, num, qty, usd, daysAgo, today, downloadCSV, METHOD } from '../lib/format'
 import type { Row } from '../lib/backend'
 
-type TabKey = 'all' | 'final' | 'proforma' | 'credit' | 'cancelled'
+type TabKey = 'all' | 'final' | 'proforma' | 'cancelled'
 
 export default function Invoices() {
   const { db, can } = useApp()
@@ -23,12 +23,11 @@ export default function Invoices() {
     if (tab === 'final') { eq.kind = 'final'; eq.status = 'posted' }
     if (tab === 'proforma') { eq.kind = 'proforma'; eq.status = 'open' }
     if (tab === 'cancelled') eq.status = 'cancelled'
-    if (tab === 'credit') { eq.kind = 'final'; eq.status = 'posted' }
     return db.list('v_invoices', {
       eq, gte: { invoice_date: from }, lte: { invoice_date: to },
       search: term ? { cols: ['number', 'customer_name', 'customer_phone'], term } : undefined,
       order: [{ col: 'created_at', asc: false }], limit: 500,
-    }).then((r) => (tab === 'credit' ? r.filter((x: any) => Number(x.remaining_sdg) > 0) : r))
+    })
   }, [tab, term, from, to], ['invoices', 'payments'])
 
   useEffect(() => { if (sp.get('open')) { setOpenId(sp.get('open')); sp.delete('open'); setSp(sp, { replace: true }) } }, [sp, setSp])
@@ -39,7 +38,7 @@ export default function Invoices() {
 
   return (
     <>
-      <PageHeader title="الفواتير" subtitle="كل الفواتير المبدئية والنهائية" icon={<FileText size={22} />}
+      <PageHeader title="الفواتير" icon={<FileText size={22} />}
         actions={<>
           <button className="btn-ghost" onClick={() => downloadCSV('الفواتير', rows, [
             { key: 'number', label: 'الرقم' }, { key: 'invoice_date', label: 'التاريخ' }, { key: 'customer_name', label: 'العميل' },
@@ -51,11 +50,11 @@ export default function Invoices() {
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         <Tabs value={tab} onChange={setTab} items={[
           { key: 'all', label: 'الكل' }, { key: 'final', label: 'نهائية' }, { key: 'proforma', label: 'مبدئية مفتوحة' },
-          { key: 'credit', label: 'عليها فلوس' }, { key: 'cancelled', label: 'ملغية' }]} />
-        <SearchBox value={term} onChange={setTerm} placeholder="رقم الفاتورة أو العميل أو الموبايل" className="w-80" />
+          { key: 'cancelled', label: 'ملغية' }]} />
+        <SearchBox value={term} onChange={setTerm} placeholder="رقم الفاتورة أو العميل أو الهاتف" className="w-80" />
         <div className="flex items-center gap-2 text-sm text-zinc-400">
           من <input type="date" className="input h-10 w-40" value={from} onChange={(e) => setFrom(e.target.value)} />
-          لـ <input type="date" className="input h-10 w-40" value={to} onChange={(e) => setTo(e.target.value)} />
+          إلى <input type="date" className="input h-10 w-40" value={to} onChange={(e) => setTo(e.target.value)} />
         </div>
         <div className="mr-auto text-sm text-zinc-400">{rows.length} فاتورة · <Money v={total} className="text-zinc-100 font-bold" /></div>
       </div>
@@ -116,12 +115,12 @@ export function InvoiceDrawer({ id, onClose, onOpen }: { id: string; onClose: ()
   const print = (pdf = false) => inv && printDoc(<InvoiceDoc inv={inv} items={data!.items} settings={settings} />, pdf ? { pdf: inv.number, bare: true } : {})
 
   const cancel = async () => {
-    const reason = await confirm.ask(`إلغاء الفاتورة ${inv!.number}؟`, { danger: true, reason: true, text: inv!.kind === 'final' ? 'البضاعة هترجع المخزن، ولو في فلوس اتدفعت هتتسجل كمرتجع للعميل.' : undefined })
-    if (reason) await run(() => db.rpc('cancel_invoice', { p_id: id, p_reason: reason }), 'الفاتورة اتلغت')
+    const reason = await confirm.ask(`إلغاء الفاتورة ${inv!.number}؟`, { danger: true, reason: true, text: inv!.kind === 'final' ? 'ستعود البضاعة إلى المخزن، وإن كانت هناك مبالغ مدفوعة فستُسجَّل مردودًا للعميل.' : undefined })
+    if (reason) await run(() => db.rpc('cancel_invoice', { p_id: id, p_reason: reason }), 'أُلغيت الفاتورة')
     reload()
   }
   const delivery = async () => {
-    const r = await run(() => db.rpc<Row>('create_delivery_permit', { p_invoice: id }), 'إذن التسليم اتعمل واتبعت للمخزن')
+    const r = await run(() => db.rpc<Row>('create_delivery_permit', { p_invoice: id }), 'أُنشئ إذن التسليم وأُرسل إلى المخزن')
     if (r) reload()
   }
 
@@ -139,7 +138,7 @@ export function InvoiceDrawer({ id, onClose, onOpen }: { id: string; onClose: ()
         {inv.kind === 'proforma' && inv.status === 'open' && can('sales', 'edit') && <button className="btn-ghost" onClick={() => nav(`/sales/${inv.id}`)}><Pencil size={17} /> تعديل</button>}
         {inv.kind === 'final' && inv.status === 'posted' && Number(inv.undelivered_qty) > 0 && can('delivery', 'create') && <button className="btn-ghost" disabled={busy} onClick={delivery}><Truck size={17} /> إذن تسليم</button>}
         {inv.kind === 'final' && inv.status === 'posted' && Number(inv.remaining_sdg) > 0 && can('accounting', 'create') && <button className="btn-primary" onClick={() => setCollect(true)}><HandCoins size={17} /> تحصيل</button>}
-        {inv.kind === 'proforma' && inv.status === 'open' && can('sales', 'create') && <button className="btn-primary" onClick={() => setConvert(true)}><ArrowLeftRight size={17} /> تحويل لنهائية</button>}
+        {inv.kind === 'proforma' && inv.status === 'open' && can('sales', 'create') && <button className="btn-primary" onClick={() => setConvert(true)}><ArrowLeftRight size={17} /> تحويل إلى نهائية</button>}
       </>}>
       {!data || !inv ? <Loading /> : (
         <div className="space-y-5">
@@ -148,8 +147,8 @@ export function InvoiceDrawer({ id, onClose, onOpen }: { id: string; onClose: ()
             <Info label="سعر الصرف" value={<span className="num">{num(inv.rate, 2)}</span>} sub="ج.س للدولار" />
             <Info label="الإجمالي" value={<Money v={Number(inv.total_sdg) - returned} />}
               sub={[Number(inv.discount_sdg) ? `بعد خصم ${sdg(inv.discount_sdg)}` : '', returned ? `مرتجع ${sdg(returned)}` : ''].filter(Boolean).join(' · ') || undefined} />
-            {inv.kind === 'final' ? <Info label="المتبقي" value={<Money v={inv.remaining_sdg} className={Number(inv.remaining_sdg) > 0 ? 'text-red-300' : 'text-emerald-300'} />} sub={`اتدفع ${sdg(inv.paid_sdg)}`} />
-              : <Info label="بالأسعار الحالية" value={rate ? <span className="num text-brand-300">{sdg(data.items.reduce((s: number, i: any) => s + Number(i.unit_price_usd) * rate * Number(i.qty), 0) - Number(inv.discount_sdg))}</span> : '—'} sub="لو اتحولت النهارده" />}
+            {inv.kind === 'final' ? <Info label="المتبقي" value={<Money v={inv.remaining_sdg} className={Number(inv.remaining_sdg) > 0 ? 'text-red-300' : 'text-emerald-300'} />} sub={`المدفوع ${sdg(inv.paid_sdg)}`} />
+              : <Info label="بالأسعار الحالية" value={rate ? <span className="num text-brand-300">{sdg(data.items.reduce((s: number, i: any) => s + Number(i.unit_price_usd) * rate * Number(i.qty), 0) - Number(inv.discount_sdg))}</span> : '—'} sub="إذا حُوِّلت اليوم" />}
           </div>
           {inv.cancel_reason && <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">سبب الإلغاء: {inv.cancel_reason}</div>}
           {inv.source_proforma_id && <button onClick={() => onOpen(inv.source_proforma_id)} className="text-sm text-brand-400">← الفاتورة المبدئية الأصلية</button>}
@@ -157,7 +156,7 @@ export function InvoiceDrawer({ id, onClose, onOpen }: { id: string; onClose: ()
 
           <div className="rounded-xl border border-ink-700 overflow-hidden">
             <table className="tbl">
-              <thead><tr><th>الكود</th><th>الصنف</th><th>الموديل</th><th>الكمية</th><th>السعر $</th><th>السعر ج.س</th><th>الإجمالي</th>{inv.kind === 'final' && <th>اتسلّم</th>}{returned > 0 && <th>رجع</th>}</tr></thead>
+              <thead><tr><th>الكود</th><th>الصنف</th><th>الموديل</th><th>الكمية</th><th>السعر $</th><th>السعر ج.س</th><th>الإجمالي</th>{inv.kind === 'final' && <th>المُسلَّم</th>}{returned > 0 && <th>المرتجع</th>}</tr></thead>
               <tbody>{data.items.map((i: any) => {
                 const net = Number(i.qty) - Number(i.returned_qty ?? 0)
                 return (
@@ -200,7 +199,7 @@ export function InvoiceDrawer({ id, onClose, onOpen }: { id: string; onClose: ()
               <div key={r.id} className="flex items-center gap-3 text-sm py-2 border-b border-ink-700">
                 <span className="num" dir="ltr">{r.number}</span>
                 <span className="text-zinc-400">{date(r.return_date)} · {qty(r.total_qty)} قطعة · {r.reason}</span>
-                {Number(r.refund_sdg) > 0 && <Badge cls="bg-red-500/15 text-red-300">اترد {sdg(r.refund_sdg)}</Badge>}
+                {Number(r.refund_sdg) > 0 && <Badge cls="bg-red-500/15 text-red-300">المردود {sdg(r.refund_sdg)}</Badge>}
                 <Money v={r.total_sdg} className="mr-auto text-red-300" />
               </div>
             ))}
@@ -236,20 +235,20 @@ function ConvertModal({ open, inv, onClose, onDone }: { open: boolean; inv: Row;
   const go = async () => {
     const r = await run(() => db.rpc<Row>('convert_proforma', {
       p_id: inv.id, p_paid: mode === 'full' ? 999999999999 : mode === 'credit' ? 0 : Number(paid) || 0, p_method: method, p_keep_sdg: keep,
-    }), 'اتحولت لفاتورة نهائية والمخزن اتخصم')
+    }), 'حُوِّلت إلى فاتورة نهائية وخُصمت الكميات من المخزن')
     if (r) onDone(r.id)
   }
   return (
-    <Modal open={open} onClose={onClose} width="max-w-md" title="تحويل لفاتورة نهائية" subtitle="هيتخصم من المخزن وهيتسجل البيع">
+    <Modal open={open} onClose={onClose} width="max-w-md" title="تحويل إلى فاتورة نهائية" subtitle="ستُخصم الكميات من المخزن ويُسجَّل البيع">
       <div className="space-y-4">
-        <Segmented value={mode} onChange={setMode} items={[{ key: 'full', label: 'كاش كامل' }, { key: 'partial', label: 'دفع جزئي' }, { key: 'credit', label: 'آجل' }]} />
+        <Segmented value={mode} onChange={setMode} items={[{ key: 'full', label: 'نقدًا بالكامل' }, { key: 'partial', label: 'دفع جزئي' }, { key: 'credit', label: 'آجل' }]} />
         {mode === 'partial' && <Field label="المبلغ المدفوع"><input className="input num" value={paid} onChange={(e) => setPaid(e.target.value.replace(/[^\d.]/g, ''))} /></Field>}
         {mode !== 'credit' && <Field label="طريقة الدفع"><select className="input" value={method} onChange={(e) => setMethod(e.target.value)}>
-          <option value="cash">كاش</option><option value="bank">بنك</option><option value="transfer">تحويل</option><option value="cheque">شيك</option></select></Field>}
+          <option value="cash">نقدًا</option><option value="bank">بنك</option><option value="transfer">تحويل</option><option value="cheque">شيك</option></select></Field>}
         {can('sales', 'approve') && (
           <label className="flex items-start gap-3 p-3 rounded-xl border border-ink-600 cursor-pointer">
             <input type="checkbox" className="mt-1 accent-orange-500" checked={keep} onChange={(e) => setKeep(e.target.checked)} />
-            <span className="text-sm"><b>ثبّت أسعار المبدئية بالجنيه</b><br /><span className="text-zinc-400">من غير تثبيت، السعر بيتحسب على ريت النهارده.</span></span>
+            <span className="text-sm"><b>تثبيت أسعار الفاتورة المبدئية بالجنيه</b><br /><span className="text-zinc-400">دون التثبيت، يُحسب السعر وفق سعر صرف اليوم.</span></span>
           </label>
         )}
         <button className="btn-primary w-full" disabled={busy} onClick={go}>تأكيد التحويل</button>
@@ -272,15 +271,15 @@ function ReturnModal({ open, inv, items, onClose, onDone }: { open: boolean; inv
   const refund = Math.max(0, Number(inv.paid_sdg) - remainingAfter)
   const go = async () => {
     const p_items = items.filter((i) => Number(q[i.id]) > 0).map((i) => ({ invoice_item_id: i.id, qty: Number(q[i.id]) }))
-    const r = await run(() => db.rpc('create_sales_return', { p_invoice: inv.id, p_items: p_items, p_reason: reason }), 'المرتجع اتسجل والبضاعة رجعت المخزن')
+    const r = await run(() => db.rpc('create_sales_return', { p_invoice: inv.id, p_items: p_items, p_reason: reason }), 'سُجِّل المرتجع وعادت البضاعة إلى المخزن')
     if (r) onDone()
   }
   return (
-    <Modal open={open} onClose={onClose} width="max-w-2xl" title={`مرتجع من ${inv.number}`} subtitle="اكتب الكمية الراجعة من كل صنف، والبضاعة هترجع المخزن">
+    <Modal open={open} onClose={onClose} width="max-w-2xl" title={`مرتجع من ${inv.number}`} subtitle="أدخل الكمية المرتجعة من كل صنف، وستعود البضاعة إلى المخزن">
       <div className="space-y-4">
         <div className="rounded-xl border border-ink-700 overflow-hidden">
           <table className="tbl">
-            <thead><tr><th>الصنف</th><th>المباع</th><th>رجع قبل كده</th><th>السعر</th><th className="w-32">الكمية الراجعة</th></tr></thead>
+            <thead><tr><th>الصنف</th><th>المباع</th><th>أُرجع سابقًا</th><th>السعر</th><th className="w-32">الكمية المرتجعة</th></tr></thead>
             <tbody>{items.map((i) => (
               <tr key={i.id}>
                 <td className="font-semibold">{i.name} <span className="num text-zinc-500 text-xs">{i.code}</span></td>
@@ -290,15 +289,15 @@ function ReturnModal({ open, inv, items, onClose, onDone }: { open: boolean; inv
                 <td>{left(i) > 0
                   ? <input className="input h-9 num" placeholder={`حتى ${qty(left(i))}`} value={q[i.id] ?? ''}
                       onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ''); setQ({ ...q, [i.id]: Number(v) > left(i) ? String(left(i)) : v }) }} />
-                  : <span className="text-zinc-500 text-sm">رجع كله</span>}</td>
+                  : <span className="text-zinc-500 text-sm">إرجاع الكل</span>}</td>
               </tr>
             ))}</tbody>
           </table>
         </div>
-        <Field label="سبب المرتجع"><input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="مثلاً: عيب في الصنف" /></Field>
+        <Field label="سبب المرتجع"><input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="مثلًا: عيب في الصنف" /></Field>
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-xl bg-ink-900 border border-ink-700 p-3"><div className="text-[12px] text-zinc-500">قيمة المرتجع</div><Money v={value} className="font-bold text-red-300" /></div>
-          <div className="rounded-xl bg-ink-900 border border-ink-700 p-3"><div className="text-[12px] text-zinc-500">هيترد للعميل كاش</div><Money v={refund} className="font-bold" /></div>
+          <div className="rounded-xl bg-ink-900 border border-ink-700 p-3"><div className="text-[12px] text-zinc-500">سيُرد للعميل نقدًا</div><Money v={refund} className="font-bold" /></div>
         </div>
         {Number(inv.discount_sdg) > 0 && <div className="text-xs text-zinc-500">القيمة محسوبة بعد نصيب الأصناف من خصم الفاتورة.</div>}
         <button className="btn-primary w-full" disabled={busy || value <= 0 || !reason.trim()} onClick={go}>تأكيد المرتجع</button>
@@ -314,7 +313,7 @@ export function CollectModal({ open, inv, onClose, onDone }: { open: boolean; in
   const [method, setMethod] = useState('cash')
   useEffect(() => { if (open) setAmt(String(Math.round(Number(inv.remaining_sdg)))) }, [open, inv])
   const go = async () => {
-    const r = await run(() => db.rpc('record_payment', { p: { direction: 'in', party_type: 'customer', invoice_id: inv.id, amount_sdg: Number(amt), method, notes: `تحصيل من فاتورة ${inv.number}` } }), 'اتسجل التحصيل')
+    const r = await run(() => db.rpc('record_payment', { p: { direction: 'in', party_type: 'customer', invoice_id: inv.id, amount_sdg: Number(amt), method, notes: `تحصيل من فاتورة ${inv.number}` } }), 'سُجِّل التحصيل')
     if (r) onDone()
   }
   return (
@@ -322,7 +321,7 @@ export function CollectModal({ open, inv, onClose, onDone }: { open: boolean; in
       <div className="space-y-4">
         <Field label="المبلغ"><input className="input num text-lg" autoFocus value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ''))} /></Field>
         <Field label="طريقة الدفع"><select className="input" value={method} onChange={(e) => setMethod(e.target.value)}>
-          <option value="cash">كاش</option><option value="bank">بنك</option><option value="transfer">تحويل</option><option value="cheque">شيك</option></select></Field>
+          <option value="cash">نقدًا</option><option value="bank">بنك</option><option value="transfer">تحويل</option><option value="cheque">شيك</option></select></Field>
         <button className="btn-primary w-full" disabled={busy || !(Number(amt) > 0)} onClick={go}>تسجيل</button>
       </div>
     </Modal>

@@ -99,7 +99,7 @@ export function InvoiceDoc({ inv, items, settings: _settings }: { inv: Row; item
           <div style={{ ...at(560, 1000, 486, 514), ...text(3, { fontWeight: 600, color: '#444', gap: '1.5mm' }) }}>
             <span>{isPF ? 'عرض سعر رقم' : 'فاتورة رقم'}</span><span dir="ltr">{inv.number}</span>
             {inv.status === 'cancelled' && <span style={{ color: '#c00', fontWeight: 900 }}>— ملغية</span>}
-            {pages.length > 1 && <span>(صفحة {pi + 1} من {pages.length})</span>}
+            {pages.length > 1 && <span>(الصفحة {pi + 1} من {pages.length})</span>}
           </div>
           {rows.map((l, i) => {
             const y1 = ROW_TOP + i * ROW_H, y2 = y1 + ROW_H
@@ -162,7 +162,7 @@ export function DeliveryDoc({ permit, items, settings }: { permit: Row; items: R
         ))}</tbody>
       </table>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 50, fontSize: 12 }}>
-        <div>الحسابات: ....................</div><div>أمين المخزن: ....................</div><div>المستلم: ....................</div>
+        <div>المحاسب: ....................</div><div>أمين المخزن: ....................</div><div>المستلم: ....................</div>
       </div>
     </div>
   )

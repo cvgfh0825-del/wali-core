@@ -31,7 +31,7 @@ export default function Notifications() {
   const rows = data ?? []
   const unread = rows.filter((n: any) => !n.read_at)
 
-  const markAll = () => run(async () => { for (const n of unread) await db.update('notifications', n.id, { read_at: new Date().toISOString() }) }, 'اتعلّم الكل كمقروء')
+  const markAll = () => run(async () => { for (const n of unread) await db.update('notifications', n.id, { read_at: new Date().toISOString() }) }, 'عُلِّم الكل كمقروء')
   const open = async (n: any) => {
     if (!n.read_at) await db.update('notifications', n.id, { read_at: new Date().toISOString() })
     if (n.entity_type === 'invoices' && n.entity_id) setInv(n.entity_id)
@@ -46,11 +46,11 @@ export default function Notifications() {
 
   return (
     <>
-      <PageHeader title="الإشعارات" subtitle="كل اللي بيحصل في السيستم — بيوصلك برضه على الموبايل" icon={<Bell size={22} />}
+      <PageHeader title="الإشعارات" icon={<Bell size={22} />}
         actions={unread.length > 0 && <button className="btn-ghost" onClick={markAll}><CheckCheck size={17} /> علّم الكل كمقروء</button>} />
-      <Tabs value={tab} onChange={setTab} items={[{ key: 'all', label: 'الكل' }, { key: 'unread', label: 'غير مقروء' }, { key: 'sales', label: 'المبيعات والفلوس' }, { key: 'stock', label: 'المخزن' }, { key: 'people', label: 'الموظفين والشركاء' }]} />
+      <Tabs value={tab} onChange={setTab} items={[{ key: 'all', label: 'الكل' }, { key: 'unread', label: 'غير مقروء' }, { key: 'sales', label: 'المبيعات والأموال' }, { key: 'stock', label: 'المخزن' }, { key: 'people', label: 'الموظفون والشركاء' }]} />
       <div className="mt-5 max-w-4xl">
-        {loading ? <Loading /> : !rows.length ? <div className="card"><Empty title="مفيش إشعارات" /></div> : Object.entries(groups).map(([day, list]) => (
+        {loading ? <Loading /> : !rows.length ? <div className="card"><Empty title="لا توجد إشعارات" /></div> : Object.entries(groups).map(([day, list]) => (
           <div key={day} className="mb-6">
             <div className="text-[13px] font-bold text-zinc-500 mb-2">{day}</div>
             <div className="card divide-y divide-ink-700/70 overflow-hidden">

@@ -38,18 +38,18 @@ export default function Stock() {
 
   const printCount = () => printDoc(<TableDoc title="كشف جرد المخزن" settings={settings} rows={products.data ?? []} cols={[
     { key: 'code', label: 'الكود' }, { key: 'name', label: 'الصنف' }, { key: 'model', label: 'الموديل' },
-    { key: 'qty_on_hand', label: 'رصيد السيستم', fmt: qty }, { key: 'x', label: 'الجرد الفعلي', fmt: () => '' }, { key: 'y', label: 'الفرق', fmt: () => '' }]} />)
+    { key: 'qty_on_hand', label: 'رصيد النظام', fmt: qty }, { key: 'x', label: 'الجرد الفعلي', fmt: () => '' }, { key: 'y', label: 'الفرق', fmt: () => '' }]} />)
 
   return (
     <>
-      <PageHeader title="حركة المخزن والجرد" subtitle="كل وارد ومنصرف بيتسجل هنا تلقائياً" icon={<Warehouse size={22} />}
+      <PageHeader title="حركة المخزن والجرد" icon={<Warehouse size={22} />}
         actions={tab === 'count' && can('stock', 'print') && <button className="btn-ghost" onClick={printCount}><Printer size={17} /> طباعة كشف جرد</button>} />
       <div className="flex items-center gap-3 mb-4">
         <Tabs value={tab} onChange={setTab} items={[{ key: 'moves', label: 'سجل الحركات' }, { key: 'count', label: 'الجرد والتسوية' }]} />
         <SearchBox value={term} onChange={setTerm} placeholder="صنف أو كود أو رقم مستند" className="w-80" />
         {tab === 'moves' && <div className="flex items-center gap-2 text-sm text-zinc-400">
           من <input type="date" className="input h-10 w-40" value={from} onChange={(e) => setFrom(e.target.value)} />
-          لـ <input type="date" className="input h-10 w-40" value={to} onChange={(e) => setTo(e.target.value)} /></div>}
+          إلى <input type="date" className="input h-10 w-40" value={to} onChange={(e) => setTo(e.target.value)} /></div>}
       </div>
 
       <div className="card overflow-hidden">
@@ -75,7 +75,7 @@ export default function Stock() {
         )) : (products.loading ? <Loading /> : (
           <div className="max-h-[calc(100vh-280px)] overflow-auto">
             <table className="tbl">
-              <thead><tr><th>الكود</th><th>الصنف</th><th>الموديل</th><th>رصيد السيستم</th><th>محجوز</th><th>أقل كمية</th><th></th></tr></thead>
+              <thead><tr><th>الكود</th><th>الصنف</th><th>الموديل</th><th>رصيد النظام</th><th>محجوز</th><th>أقل كمية</th><th></th></tr></thead>
               <tbody>{(products.data ?? []).map((p: any) => (
                 <tr key={p.id}>
                   <td className="num">{p.code}</td><td className="font-semibold">{p.name}</td><td className="text-zinc-400" dir="ltr">{p.model}</td>
@@ -100,16 +100,16 @@ function AdjustModal({ p, onClose }: { p: Row; onClose: () => void }) {
   const [note, setNote] = useState('')
   const diff = Number(v) - Number(p.qty_on_hand)
   return (
-    <Modal open onClose={onClose} width="max-w-md" title={`تسوية جرد: ${p.name}`} subtitle="اكتب الكمية الفعلية اللي اتعدّت في المخزن">
+    <Modal open onClose={onClose} width="max-w-md" title={`تسوية جرد: ${p.name}`} subtitle="أدخل الكمية الفعلية التي جُردت في المخزن">
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="رصيد السيستم"><input className="input num" disabled value={qty(p.qty_on_hand)} /></Field>
+          <Field label="رصيد النظام"><input className="input num" disabled value={qty(p.qty_on_hand)} /></Field>
           <Field label="الكمية الفعلية"><input className="input num" autoFocus value={v} onChange={(e) => setV(e.target.value.replace(/[^\d.]/g, ''))} /></Field>
         </div>
-        {diff !== 0 && <div className={`rounded-xl px-4 py-3 text-sm ${diff > 0 ? 'bg-emerald-500/10 text-emerald-300' : 'bg-red-500/10 text-red-300'}`}>الفرق: <b className="num">{diff > 0 ? '+' : ''}{qty(diff)}</b> — هيوصل إشعار للأدمن</div>}
+        {diff !== 0 && <div className={`rounded-xl px-4 py-3 text-sm ${diff > 0 ? 'bg-emerald-500/10 text-emerald-300' : 'bg-red-500/10 text-red-300'}`}>الفرق: <b className="num">{diff > 0 ? '+' : ''}{qty(diff)}</b> — سيُرسل إشعار إلى مدير النظام</div>}
         <Field label="السبب"><input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="جرد شهري / كسر / ..." /></Field>
         <button className="btn-primary w-full" disabled={busy || diff === 0 || !note.trim()} onClick={async () => {
-          if (await run(() => db.rpc('adjust_stock', { p_product: p.id, p_new_qty: Number(v), p_note: note }), 'التسوية اتسجلت') !== undefined) onClose()
+          if (await run(() => db.rpc('adjust_stock', { p_product: p.id, p_new_qty: Number(v), p_note: note }), 'سُجِّلت التسوية') !== undefined) onClose()
         }}>حفظ التسوية</button>
       </div>
     </Modal>

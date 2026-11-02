@@ -39,7 +39,7 @@ export default function SalesPOS() {
     if (!id) return
     ;(async () => {
       const inv = await db.get('invoices', id)
-      if (!inv || inv.kind !== 'proforma' || inv.status !== 'open') { toast('الفاتورة دي مينفعش تتعدل', 'err'); nav('/invoices'); return }
+      if (!inv || inv.kind !== 'proforma' || inv.status !== 'open') { toast('لا يمكن تعديل هذه الفاتورة', 'err'); nav('/invoices'); return }
       const items = await db.list('invoice_items', { eq: { invoice_id: id }, order: [{ col: 'sort' }] })
       const prods = await db.list('v_products', { in: { id: items.map((i: any) => i.product_id) } })
       setLines(items.map((i: any) => ({ product: prods.find((p: any) => p.id === i.product_id)!, qty: Number(i.qty) })).filter((l) => l.product))
@@ -70,9 +70,9 @@ export default function SalesPOS() {
     const code = term.trim()
     if (!code) return
     const hit = (await db.list('v_products', { eq: { code } }))[0] ?? (await db.list('v_products', { eq: { barcode: code } }))[0]
-    if (hit) { add(hit); setTerm(''); toast(`اتضاف: ${hit.name}`, 'info') }
+    if (hit) { add(hit); setTerm(''); toast(`أُضيف: ${hit.name}`, 'info') }
     else if ((products.data ?? []).length === 1) { add(products.data![0]); setTerm('') }
-    else toast('مفيش صنف بالكود ده', 'err')
+    else toast('لا يوجد صنف بهذا الكود', 'err')
   }
 
   const save = async (kind: 'proforma' | 'final') => {
@@ -111,16 +111,16 @@ export default function SalesPOS() {
           <div className="relative flex-1">
             <ScanBarcode size={20} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-brand-500" />
             <input ref={scanRef} autoFocus className="input h-12 pr-11 text-[15px]" value={term} onChange={(e) => setTerm(e.target.value)} onKeyDown={onScan}
-              placeholder="امسح الباركود أو اكتب الكود / الاسم / الموديل ودوس Enter" />
+              placeholder="امسح الباركود أو اكتب الكود / الاسم / الموديل واضغط Enter" />
           </div>
-          {!rate && <div className="chip h-12 px-3 rounded-xl bg-amber-500/10 text-amber-300 border border-amber-500/30"><AlertTriangle size={15} /> اكتب ريت النهارده الأول</div>}
+          {!rate && <div className="chip h-12 px-3 rounded-xl bg-amber-500/10 text-amber-300 border border-amber-500/30"><AlertTriangle size={15} /> أدخل سعر صرف اليوم أولًا</div>}
         </div>
         <div className="flex-1 overflow-auto">
           <table className="tbl text-[13px] [&_td]:px-2 [&_th]:px-2">
             <thead><tr>
               <th className="w-12"></th><th>الموديل</th><th>الاسم</th><th>الكود</th>
-              <th title="كل اللي دخل المخزن">الكمية</th><th title="اللي اتسلم للعملاء فعلاً">المسحوب</th>
-              <th>المباع</th><th title="محجوز في فواتير مبدئية مفتوحة">محجوز</th><th>الباقي</th><th>السعر ج.س</th><th></th>
+              <th title="إجمالي ما دخل المخزن">الكمية</th><th title="ما سُلِّم للعملاء فعليًا">المسحوب</th>
+              <th>المباع</th><th title="محجوز في فواتير مبدئية مفتوحة">محجوز</th><th>المتبقي</th><th>السعر ج.س</th><th></th>
             </tr></thead>
             <tbody>
               {(products.data ?? []).map((p: any) => {
@@ -148,7 +148,7 @@ export default function SalesPOS() {
               })}
             </tbody>
           </table>
-          {products.data && !products.data.length && <Empty title="مفيش أصناف بالبحث ده" />}
+          {products.data && !products.data.length && <Empty title="لا توجد أصناف مطابقة للبحث" />}
         </div>
       </div>
 
@@ -169,7 +169,7 @@ export default function SalesPOS() {
             </div>
             <div className="relative">
               <Phone size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-              <input className="input pr-9 num" dir="ltr" placeholder="الموبايل" value={customer.phone} disabled={!!customer.id}
+              <input className="input pr-9 num" dir="ltr" placeholder="الهاتف" value={customer.phone} disabled={!!customer.id}
                 onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} />
             </div>
           </div>
@@ -188,7 +188,7 @@ export default function SalesPOS() {
           {!lines.length && (
             <div className="h-full flex flex-col items-center justify-center text-center text-zinc-500 gap-3 py-10">
               <PackageSearch size={44} className="text-ink-500" />
-              <div>امسح باركود أو دوس <span className="text-brand-400">+</span> قدام الصنف</div>
+              <div>امسح باركود أو اضغط <span className="text-brand-400">+</span> بجوار الصنف</div>
             </div>
           )}
           {lines.map((l) => {
@@ -214,7 +214,7 @@ export default function SalesPOS() {
                   ) : <span className="text-[12px] text-zinc-400 num">× {sdg(priceOf(l))}</span>}
                   <Money v={priceOf(l) * l.qty} className="font-bold" />
                 </div>
-                {over && <div className="text-[11px] text-amber-300 mt-2 flex items-center gap-1"><AlertTriangle size={12} /> الباقي في المخزن {qty(l.product.qty_on_hand)} بس — ينفع مبدئية، النهائية هترفض</div>}
+                {over && <div className="text-[11px] text-amber-300 mt-2 flex items-center gap-1"><AlertTriangle size={12} /> الباقي في المخزن {qty(l.product.qty_on_hand)} فقط — يمكن حفظها مبدئية، أما النهائية فستُرفض</div>}
               </div>
             )
           })}
@@ -225,12 +225,12 @@ export default function SalesPOS() {
             <Field label="خصم (ج.س)"><input className="input h-10 num" value={discount} onChange={(e) => setDiscount(e.target.value.replace(/[^\d.]/g, ''))} placeholder="0" /></Field>
             <Field label="ملاحظات"><input className="input h-10" value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
           </div>
-          <Segmented value={payMode} onChange={setPayMode} items={[{ key: 'full', label: 'كاش كامل' }, { key: 'partial', label: 'دفع جزئي' }, { key: 'credit', label: 'آجل' }]} />
+          <Segmented value={payMode} onChange={setPayMode} items={[{ key: 'full', label: 'نقدًا بالكامل' }, { key: 'partial', label: 'دفع جزئي' }, { key: 'credit', label: 'آجل' }]} />
           {payMode !== 'credit' && (
             <div className="grid grid-cols-2 gap-2">
               {payMode === 'partial' && <input className="input h-10 num" placeholder="المبلغ المدفوع" value={paid} onChange={(e) => setPaid(e.target.value.replace(/[^\d.]/g, ''))} />}
               <select className={`input h-10 ${payMode === 'full' ? 'col-span-2' : ''}`} value={method} onChange={(e) => setMethod(e.target.value)}>
-                <option value="cash">كاش</option><option value="bank">بنك</option><option value="transfer">تحويل بنكي / بنكك</option><option value="cheque">شيك</option>
+                <option value="cash">نقدًا</option><option value="bank">بنك</option><option value="transfer">تحويل بنكي / بنكك</option><option value="cheque">شيك</option>
               </select>
             </div>
           )}
@@ -253,10 +253,10 @@ export default function SalesPOS() {
             <div className={`w-20 h-20 mx-auto rounded-full flex items-center justify-center ${done.kind === 'final' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'}`}>
               {done.kind === 'final' ? <CheckCircle2 size={40} /> : <FileClock size={40} />}
             </div>
-            <div className="font-display text-2xl font-black mt-4">{done.kind === 'final' ? 'الفاتورة اتسجلت' : 'المبدئية اتسجلت'}</div>
+            <div className="font-display text-2xl font-black mt-4">{done.kind === 'final' ? 'سُجِّلت الفاتورة' : 'سُجِّلت الفاتورة المبدئية'}</div>
             <div className="num text-zinc-400 mt-1" dir="ltr">{done.number}</div>
             <div className="num text-3xl font-black text-brand-400 mt-3">{sdg(done.total_sdg)} <span className="text-sm text-zinc-500 font-sans">ج.س</span></div>
-            {done.kind === 'proforma' && <p className="text-[13px] text-zinc-400 mt-3">اتبعت إشعار للأدمن بالفاتورة دي.</p>}
+            {done.kind === 'proforma' && <p className="text-[13px] text-zinc-400 mt-3">أُرسل إشعار بهذه الفاتورة إلى مدير النظام.</p>}
             <div className="flex gap-2 mt-6">
               <button className="btn-primary flex-1" onClick={printDone}><Printer size={18} /> طباعة</button>
               <button className="btn-ghost flex-1" onClick={() => { setDone(null); scanRef.current?.focus() }}>فاتورة جديدة</button>

@@ -21,20 +21,20 @@ export default function Purchases() {
 
   return (
     <>
-      <PageHeader title="المشتريات" subtitle="تنزيل البضاعة مع الشحن والجمارك — التكلفة النهائية بتتحسب لوحدها" icon={<ShoppingBag size={22} />}
+      <PageHeader title="المشتريات" icon={<ShoppingBag size={22} />}
         actions={can('purchases', 'create') && <button className="btn-primary" onClick={() => setCreating(true)}><Plus size={18} /> فاتورة مشتريات</button>} />
       <SearchBox value={term} onChange={setTerm} placeholder="رقم الفاتورة أو المورد" className="w-96 mb-4" />
       <div className="card overflow-hidden">
         {loading ? <Loading /> : !data?.length ? <Empty text="سجّل أول شحنة بضاعة" /> : (
           <table className="tbl">
-            <thead><tr><th>الرقم</th><th>التاريخ</th><th>المورد</th><th>البضاعة $</th><th>الريت</th><th>شحن + جمارك + رسوم</th><th>الإجمالي</th><th>المدفوع</th><th>المتبقي</th></tr></thead>
+            <thead><tr><th>الرقم</th><th>التاريخ</th><th>المورد</th><th>البضاعة $</th><th>سعر الصرف</th><th>شحن + جمارك + رسوم</th><th>الإجمالي</th><th>المدفوع</th><th>المتبقي</th></tr></thead>
             <tbody>{data.map((r: any) => (
               <tr key={r.id} className={`cursor-pointer ${r.status === 'cancelled' ? 'opacity-50' : ''}`} onClick={() => setOpen(r)}>
                 <td className="num font-semibold" dir="ltr">{r.number}</td><td className="text-zinc-400">{date(r.purchase_date)}</td><td>{r.supplier_name ?? '—'}</td>
                 <td className="num">{usd(r.goods_usd)}</td><td className="num text-zinc-400">{num(r.rate, 2)}</td>
                 <td><Money v={Number(r.shipping_sdg) + Number(r.customs_sdg) + Number(r.other_sdg)} cur={false} className="text-zinc-400" /></td>
                 <td><Money v={r.total_sdg} className="font-bold" /></td><td><Money v={r.paid_sdg} cur={false} /></td>
-                <td>{r.status === 'cancelled' ? <Badge cls="bg-red-500/15 text-red-300">ملغية</Badge> : Number(r.remaining_sdg) > 0 ? <Money v={r.remaining_sdg} className="text-red-300" /> : <Badge cls="bg-emerald-500/15 text-emerald-300">خالص</Badge>}</td>
+                <td>{r.status === 'cancelled' ? <Badge cls="bg-red-500/15 text-red-300">ملغية</Badge> : Number(r.remaining_sdg) > 0 ? <Money v={r.remaining_sdg} className="text-red-300" /> : <Badge cls="bg-emerald-500/15 text-emerald-300">مسدَّد</Badge>}</td>
               </tr>
             ))}</tbody>
           </table>
@@ -74,12 +74,12 @@ function NewPurchase({ onClose }: { onClose: () => void }) {
     const r = await run(() => db.rpc('save_purchase', { p: {
       supplier_id: f.supplier_id || null, rate: n(f.rate), shipping_sdg: n(f.shipping_sdg), customs_sdg: n(f.customs_sdg), other_sdg: n(f.other_sdg),
       paid_sdg: n(f.paid_sdg), notes: f.notes || null, items: items.map((i) => ({ product_id: i.p.id, qty: n(i.qty), unit_price_usd: n(i.price) })),
-    } }), 'المشتريات اتسجلت والمخزن والأسعار اتحدثت')
+    } }), 'سُجِّلت المشتريات وحُدِّث المخزون والأسعار')
     if (r) onClose()
   }
 
   return (
-    <Modal open onClose={onClose} width="max-w-6xl" title="فاتورة مشتريات جديدة" subtitle="الشحن والجمارك والرسوم بتتوزع على الأصناف حسب قيمتها"
+    <Modal open onClose={onClose} width="max-w-6xl" title="فاتورة مشتريات جديدة" subtitle="تُوزَّع تكاليف الشحن والجمارك والرسوم على الأصناف بحسب قيمتها"
       footer={<>
         <div className="ml-auto flex items-center gap-6 text-sm">
           <span className="text-zinc-400">البضاعة <b className="num text-zinc-100">{usd(goods)}</b></span>
@@ -92,7 +92,7 @@ function NewPurchase({ onClose }: { onClose: () => void }) {
       <div className="grid grid-cols-4 gap-3 mb-4">
         <Field label="المورد"><select className="input" value={f.supplier_id} onChange={(e) => set('supplier_id', e.target.value)}>
           <option value="">—</option>{(suppliers.data ?? []).map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
-        <Field label="سعر الدولار (الريت)"><input className="input num" value={f.rate} onChange={(e) => set('rate', e.target.value)} /></Field>
+        <Field label="سعر الدولار (سعر الصرف)"><input className="input num" value={f.rate} onChange={(e) => set('rate', e.target.value)} /></Field>
         <Field label="المدفوع للمورد (ج.س)"><input className="input num" value={f.paid_sdg} onChange={(e) => set('paid_sdg', e.target.value)} placeholder="0" /></Field>
         <Field label="ملاحظات"><input className="input" value={f.notes} onChange={(e) => set('notes', e.target.value)} placeholder="رقم الحاوية / البوليصة" /></Field>
       </div>
@@ -103,7 +103,7 @@ function NewPurchase({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="relative mb-3">
-        <SearchBox value={term} onChange={setTerm} placeholder="دوّر على الصنف بالاسم أو الكود وضيفه" />
+        <SearchBox value={term} onChange={setTerm} placeholder="ابحث عن الصنف بالاسم أو الكود وأضفه" />
         {!!found.data?.length && term && (
           <div className="absolute z-20 inset-x-0 top-12 card border-ink-600 p-1 max-h-72 overflow-auto">
             {found.data.map((p: any) => (
@@ -115,7 +115,7 @@ function NewPurchase({ onClose }: { onClose: () => void }) {
           </div>
         )}
       </div>
-      {!items.length ? <Empty title="ضيف الأصناف اللي وصلت" /> : (
+      {!items.length ? <Empty title="أضف الأصناف التي وصلت" /> : (
         <div className="rounded-xl border border-ink-700 overflow-hidden">
           <table className="tbl">
             <thead><tr><th>الصنف</th><th className="w-28">الكمية</th><th className="w-32">سعر الشراء $</th><th>الإجمالي $</th><th>التكلفة بعد المصاريف</th><th>متوسط التكلفة الجديد</th><th>سعر البيع الجديد</th><th></th></tr></thead>
@@ -157,9 +157,9 @@ function PurchaseView({ p, onClose }: { p: Row; onClose: () => void }) {
   const cancel = async () => {
     const reason = await confirm.ask(`إلغاء فاتورة المشتريات ${p.number}؟`, {
       danger: true, reason: true,
-      text: 'البضاعة هتخرج من المخزن والتكلفة هترجع زي ما كانت، ولو اتدفع للمورد حاجة هتتسجل استرداد. مينفعش تتلغي لو اتباع منها.',
+      text: 'ستخرج البضاعة من المخزن وتعود التكلفة كما كانت، وإن دُفع للمورد شيء فسيُسجَّل استردادًا. لا يمكن الإلغاء إذا بيع منها شيء.',
     })
-    if (reason && await run(() => db.rpc('cancel_purchase', { p_id: p.id, p_reason: reason }), 'فاتورة المشتريات اتلغت')) fresh.reload()
+    if (reason && await run(() => db.rpc('cancel_purchase', { p_id: p.id, p_reason: reason }), 'أُلغيت فاتورة المشتريات')) fresh.reload()
   }
   return (
     <Modal open onClose={onClose} width="max-w-4xl"
@@ -168,7 +168,7 @@ function PurchaseView({ p, onClose }: { p: Row; onClose: () => void }) {
       footer={cur.status === 'posted' && can('purchases', 'cancel') ? <button className="btn-danger" disabled={busy} onClick={cancel}><Ban size={17} /> إلغاء الفاتورة</button> : undefined}>
       {cur.cancel_reason && <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200 mb-4">سبب الإلغاء: {cur.cancel_reason}</div>}
       <div className="grid grid-cols-4 gap-3 mb-4">
-        {[['البضاعة', usd(cur.goods_usd)], ['الريت', num(cur.rate, 2)], ['الشحن', sdg(cur.shipping_sdg)], ['الجمارك + رسوم', sdg(Number(cur.customs_sdg) + Number(cur.other_sdg))]].map(([a, b]) => (
+        {[['البضاعة', usd(cur.goods_usd)], ['سعر الصرف', num(cur.rate, 2)], ['الشحن', sdg(cur.shipping_sdg)], ['الجمارك + رسوم', sdg(Number(cur.customs_sdg) + Number(cur.other_sdg))]].map(([a, b]) => (
           <div key={a} className="rounded-xl bg-ink-900 border border-ink-700 p-3"><div className="text-[12px] text-zinc-500">{a}</div><div className="num font-bold mt-1">{b}</div></div>
         ))}
       </div>
@@ -179,12 +179,12 @@ function PurchaseView({ p, onClose }: { p: Row; onClose: () => void }) {
         ))}</tbody>
       </table>
       <div className="flex items-center justify-between rounded-xl bg-ink-900 border border-ink-700 p-4">
-        <div className="text-sm">الإجمالي <Money v={cur.total_sdg} className="font-bold" /> · اتدفع <Money v={cur.paid_sdg} /> · <span className="text-red-300">متبقي <Money v={cur.remaining_sdg} /></span></div>
+        <div className="text-sm">الإجمالي <Money v={cur.total_sdg} className="font-bold" /> · المدفوع <Money v={cur.paid_sdg} /> · <span className="text-red-300">متبقي <Money v={cur.remaining_sdg} /></span></div>
         {cur.status === 'posted' && Number(cur.remaining_sdg) > 0 && can('accounting', 'create') && (
           <div className="flex gap-2">
             <input className="input h-10 w-40 num" placeholder="مبلغ" value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ''))} />
             <button className="btn-primary h-10" disabled={busy || !(Number(amt) > 0)} onClick={async () => {
-              await run(() => db.rpc('record_payment', { p: { direction: 'out', party_type: 'supplier', purchase_id: p.id, amount_sdg: Number(amt), notes: `دفعة للمورد عن ${p.number}` } }), 'اتسجل الدفع للمورد')
+              await run(() => db.rpc('record_payment', { p: { direction: 'out', party_type: 'supplier', purchase_id: p.id, amount_sdg: Number(amt), notes: `دفعة للمورد عن ${p.number}` } }), 'سُجِّل الدفع للمورد')
               setAmt(''); reload(); fresh.reload()
             }}><HandCoins size={16} /> دفع</button>
           </div>

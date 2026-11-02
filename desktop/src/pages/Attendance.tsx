@@ -25,7 +25,7 @@ export default function Attendance() {
   const present = (dayRows.data ?? []).filter((r: any) => r.check_in)
   return (
     <>
-      <PageHeader title="الحضور والانصراف" subtitle={`مواعيد الشغل ${String(settings.work_start ?? '').slice(0, 5)} — ${String(settings.work_end ?? '').slice(0, 5)} · سماح ${settings.late_grace_minutes} دقيقة`} icon={<Clock size={22} />} />
+      <PageHeader title="الحضور والانصراف" subtitle={`مواعيد العمل ${String(settings.work_start ?? '').slice(0, 5)} — ${String(settings.work_end ?? '').slice(0, 5)} · سماح ${settings.late_grace_minutes} دقيقة`} icon={<Clock size={22} />} />
       <div className="flex items-center gap-3 mb-4">
         <Tabs value={view} onChange={setView} items={[{ key: 'day', label: 'يوم' }, { key: 'month', label: 'ملخص الشهر' }]} />
         {view === 'day' ? <input type="date" className="input h-10 w-44" value={day} onChange={(e) => setDay(e.target.value)} />
@@ -35,9 +35,9 @@ export default function Attendance() {
       {view === 'day' ? (
         <>
           <div className="grid grid-cols-3 gap-4 mb-4">
-            <Stat label="حاضرين" value={`${present.length} / ${emps.data?.length ?? 0}`} tone="green" />
-            <Stat label="متأخرين" value={present.filter((r: any) => r.late_minutes > 0).length} tone="amber" />
-            <Stat label="لسه مجوش / غياب" value={(emps.data?.length ?? 0) - present.length} tone="red" />
+            <Stat label="الحاضرون" value={`${present.length} / ${emps.data?.length ?? 0}`} tone="green" />
+            <Stat label="المتأخرون" value={present.filter((r: any) => r.late_minutes > 0).length} tone="amber" />
+            <Stat label="لم يحضروا بعد / غياب" value={(emps.data?.length ?? 0) - present.length} tone="red" />
           </div>
           <div className="card overflow-hidden">
             {dayRows.loading ? <Loading /> : (
@@ -51,7 +51,7 @@ export default function Attendance() {
                       <td className="num">{time(r?.check_in)}</td><td className="num">{time(r?.check_out)}</td>
                       <td>{r?.late_minutes ? <Badge cls="bg-amber-500/15 text-amber-300">{r.late_minutes} دقيقة</Badge> : '—'}</td>
                       <td>{!r ? <Badge cls="bg-ink-700 text-zinc-400">لم يسجل</Badge> : r.status === 'absent' ? <Badge cls="bg-red-500/15 text-red-300">غياب</Badge> : r.status === 'leave' ? <Badge cls="bg-sky-500/15 text-sky-300">إجازة</Badge> : <Badge cls="bg-emerald-500/15 text-emerald-300">حاضر</Badge>}</td>
-                      <td className="text-zinc-500 text-[13px]">{r?.note}{r?.edited_by_name && <span className="text-amber-400"> (عدّله {r.edited_by_name})</span>}</td>
+                      <td className="text-zinc-500 text-[13px]">{r?.note}{r?.edited_by_name && <span className="text-amber-400"> (عدّلها {r.edited_by_name})</span>}</td>
                       <td>{can('attendance', 'edit') && <button className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-ink-700" onClick={() => setEdit({ employee: e, row: r, day })}><Pencil size={15} /></button>}</td>
                     </tr>
                   )
@@ -65,7 +65,7 @@ export default function Attendance() {
           <div className="px-5 py-3 border-b border-ink-700 flex items-center gap-2 font-bold"><CalendarDays size={17} className="text-brand-500" /> {monthName(month)}</div>
           {!summary.length ? <Empty /> : (
             <table className="tbl">
-              <thead><tr><th>الموظف</th><th>أيام الحضور</th><th>ساعات الشغل</th><th>أيام التأخير</th><th>دقايق التأخير</th><th>غياب</th></tr></thead>
+              <thead><tr><th>الموظف</th><th>أيام الحضور</th><th>ساعات العمل</th><th>أيام التأخير</th><th>دقائق التأخير</th><th>غياب</th></tr></thead>
               <tbody>{summary.map((s) => (
                 <tr key={s.e.id}><td className="font-semibold">{s.e.full_name}</td><td className="num">{s.days}</td><td className="num">{Math.round(s.hours)}</td>
                   <td className="num text-amber-300">{s.lateDays}</td><td className="num text-amber-300">{s.late}</td><td className="num text-red-300">{s.absent}</td></tr>
@@ -86,7 +86,7 @@ function EditAttendance({ x, onClose }: { x: Row; onClose: () => void }) {
   const [f, setF] = useState({ status: x.row?.status ?? 'present', in: hm(x.row?.check_in), out: hm(x.row?.check_out), late: String(x.row?.late_minutes ?? 0), note: x.row?.note ?? '' })
   const ts = (t: string) => (t ? `${x.day}T${t}:00+02:00` : '')
   const save = async () => {
-    const ok = await run(() => db.rpc('admin_set_attendance', { p: { employee_id: x.employee.id, work_date: x.day, check_in: ts(f.in), check_out: ts(f.out), late_minutes: Number(f.late) || 0, status: f.status, note: f.note } }), 'اتعدّل — ووصل إشعار للأدمن')
+    const ok = await run(() => db.rpc('admin_set_attendance', { p: { employee_id: x.employee.id, work_date: x.day, check_in: ts(f.in), check_out: ts(f.out), late_minutes: Number(f.late) || 0, status: f.status, note: f.note } }), 'تم التعديل — وأُرسل إشعار إلى مدير النظام')
     if (ok) onClose()
   }
   return (
@@ -97,7 +97,7 @@ function EditAttendance({ x, onClose }: { x: Row; onClose: () => void }) {
           <option value="present">حاضر</option><option value="absent">غياب</option><option value="leave">إجازة</option></select></Field>
         <Field label="الحضور"><input type="time" className="input" value={f.in} onChange={(e) => setF({ ...f, in: e.target.value })} /></Field>
         <Field label="الانصراف"><input type="time" className="input" value={f.out} onChange={(e) => setF({ ...f, out: e.target.value })} /></Field>
-        <Field label="دقايق التأخير"><input className="input num" value={f.late} onChange={(e) => setF({ ...f, late: e.target.value.replace(/\D/g, '') })} /></Field>
+        <Field label="دقائق التأخير"><input className="input num" value={f.late} onChange={(e) => setF({ ...f, late: e.target.value.replace(/\D/g, '') })} /></Field>
         <Field label="السبب / ملاحظة"><input className="input" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} /></Field>
       </div>
     </Modal>

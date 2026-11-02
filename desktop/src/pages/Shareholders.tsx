@@ -25,7 +25,7 @@ export default function Shareholders() {
 
   return (
     <>
-      <PageHeader title="المساهمين" subtitle="الشركاء: مرتب شهري + نسبة من المبيعات + نصيب من الأرباح السنوية" icon={<PieChart size={22} />}
+      <PageHeader title="المساهمون" icon={<PieChart size={22} />}
         actions={can('shareholders', 'create') && <button className="btn-primary" onClick={() => setEdit({})}><Plus size={18} /> مساهم جديد</button>} />
       <Tabs value={tab} onChange={setTab} items={[{ key: 'list', label: 'المساهمين والنسب' }, { key: 'payouts', label: 'المستحقات الشهرية' }]} />
 
@@ -57,8 +57,8 @@ export default function Shareholders() {
               <Donut parts={[...active.map((s: any, i: number) => ({ label: s.full_name, value: Number(s.profit_pct ?? 0), color: COLORS[i % COLORS.length] })), ...(totalPct < 100 ? [{ label: 'الشركة', value: 100 - totalPct, color: '#2E2E35' }] : [])]} />
               <div className="absolute inset-0 flex flex-col items-center justify-center"><div className="num text-2xl font-black">{num(totalPct, 1)}%</div><div className="text-[11px] text-zinc-500">للمساهمين</div></div>
             </div>
-            {totalPct > 100 && <div className="mt-3 text-[13px] text-red-300 bg-red-500/10 rounded-xl px-3 py-2">مجموع النسب أكبر من 100%! راجع النسب.</div>}
-            {totalPct < 100 && <div className="mt-3 text-[12px] text-zinc-500">الباقي {num(100 - totalPct, 1)}% بيفضل للشركة.</div>}
+            {totalPct > 100 && <div className="mt-3 text-[13px] text-red-300 bg-red-500/10 rounded-xl px-3 py-2">مجموع النسب أكبر من 100%! يُرجى مراجعة النسب.</div>}
+            {totalPct < 100 && <div className="mt-3 text-[12px] text-zinc-500">المتبقي {num(100 - totalPct, 1)}% يبقى للشركة.</div>}
             <div className="space-y-2 mt-4">{active.map((s: any, i: number) => (
               <div key={s.id} className="flex items-center gap-2 text-sm"><i className="w-3 h-3 rounded" style={{ background: COLORS[i % COLORS.length] }} /><span className="flex-1">{s.full_name}</span><span className="num">{num(s.profit_pct ?? 0, 2)}%</span></div>
             ))}</div>
@@ -68,10 +68,10 @@ export default function Shareholders() {
         <div className="mt-4">
           <div className="flex items-center gap-3 mb-4">
             <input type="month" className="input h-10 w-44" value={period} onChange={(e) => setPeriod(e.target.value)} />
-            {can('shareholders', 'create') && <button className="btn-primary h-10" disabled={busy} onClick={async () => { await run(() => db.rpc('generate_shareholder_payouts', { p_period: period }), 'اتحسبت المستحقات'); payouts.reload() }}><RefreshCw size={16} /> احسب مستحقات {monthName(period)}</button>}
+            {can('shareholders', 'create') && <button className="btn-primary h-10" disabled={busy} onClick={async () => { await run(() => db.rpc('generate_shareholder_payouts', { p_period: period }), 'حُسبت المستحقات'); payouts.reload() }}><RefreshCw size={16} /> احتساب المستحقات {monthName(period)}</button>}
           </div>
           <div className="card overflow-hidden">
-            {!payouts.data?.length ? <Empty title="لسه محسبتش المستحقات" text="بتتحسب: المرتب الشهري + نسبة كل مساهم من مبيعات الشهر" /> : (
+            {!payouts.data?.length ? <Empty title="لم تُحتسب المستحقات بعد" text="تُحتسب: المرتب الشهري + نسبة كل مساهم من مبيعات الشهر" /> : (
               <table className="tbl">
                 <thead><tr><th>المساهم</th><th>المرتب</th><th>مبيعات الشهر</th><th>النسبة</th><th>نصيبه من المبيعات</th><th>الإجمالي</th><th>الحالة</th><th></th></tr></thead>
                 <tbody>{payouts.data.map((p: any) => (
@@ -80,14 +80,14 @@ export default function Shareholders() {
                     <td className="num">{num(p.sales_pct, 2)}%</td><td className="text-emerald-300"><Money v={p.sales_share} cur={false} /></td>
                     <td><Money v={p.total} className="font-black text-brand-300" /></td><td><Badge cls={STATUS[p.status].cls}>{STATUS[p.status].label}</Badge></td>
                     <td>{p.status === 'draft' && can('shareholders', 'approve') && <button className="btn-primary btn-sm" disabled={busy} onClick={async () => {
-                      if (await confirm.ask(`صرف ${sdg(p.total)} ج.س لـ ${p.shareholder_name}؟`, { text: 'المبلغ ده بيتخصم من نصيبه في الأرباح السنوية.' })) { await run(() => db.rpc('pay_shareholder_payout', { p_id: p.id }), 'اتصرف'); payouts.reload() }
+                      if (await confirm.ask(`صرف ${sdg(p.total)} ج.س لـ ${p.shareholder_name}؟`, { text: 'يُخصم هذا المبلغ من نصيبه في الأرباح السنوية.' })) { await run(() => db.rpc('pay_shareholder_payout', { p_id: p.id }), 'تم الصرف'); payouts.reload() }
                     }}><CheckCircle2 size={14} /> صرف</button>}</td>
                   </tr>
                 ))}</tbody>
               </table>
             )}
           </div>
-          <p className="text-[12px] text-zinc-500 mt-3">المبالغ الشهرية دي بتتخصم من نصيب كل مساهم في تقرير الأرباح السنوية (صفحة التقارير).</p>
+          <p className="text-[12px] text-zinc-500 mt-3">تُخصم هذه المبالغ الشهرية من نصيب كل مساهم في تقرير الأرباح السنوية (صفحة التقارير).</p>
         </div>
       )}
       {edit && <ShareholderForm s={edit} onClose={() => setEdit(null)} />}
@@ -111,12 +111,12 @@ function ShareholderForm({ s, onClose }: { s: Row; onClose: () => void }) {
         await db.insert('shareholder_terms', { shareholder_id: c.id, effective_from: f.joined_at, monthly_salary: Number(f.monthly_salary) || 0, sales_pct: Number(f.sales_pct) || 0, profit_pct: Number(f.profit_pct) || 0 })
       } else await db.update('shareholders', s.id, body)
       return true
-    }, 'اتحفظ')
+    }, 'تم الحفظ')
     if (ok) onClose()
   }
   const leave = async () => {
-    if (await confirm.ask(`إخراج ${s.full_name} من المساهمين؟`, { danger: true, text: 'هيبطّل ياخد نسب من النهارده، وكل اللي أخده قبل كده هيفضل متسجل في التقارير.' })) {
-      if (await run(() => db.update('shareholders', s.id, { is_active: false, left_at: today() }), 'اتسجل خروجه')) onClose()
+    if (await confirm.ask(`إخراج ${s.full_name} من المساهمين؟`, { danger: true, text: 'سيتوقف احتساب نسبه اعتبارًا من اليوم، وسيبقى كل ما حصل عليه سابقًا مسجَّلًا في التقارير.' })) {
+      if (await run(() => db.update('shareholders', s.id, { is_active: false, left_at: today() }), 'سُجِّل خروجه')) onClose()
     }
   }
   return (
@@ -126,7 +126,7 @@ function ShareholderForm({ s, onClose }: { s: Row; onClose: () => void }) {
         <button className="btn-ghost" onClick={onClose}>إلغاء</button><button className="btn-primary" disabled={busy || !f.full_name?.trim()} onClick={save}>حفظ</button></>}>
       <div className="grid grid-cols-2 gap-3">
         <Field label="الاسم *" className="col-span-2"><input className="input" autoFocus value={f.full_name} onChange={(e) => setF({ ...f, full_name: e.target.value })} /></Field>
-        <Field label="الموبايل"><input className="input num" dir="ltr" value={f.phone ?? ''} onChange={(e) => setF({ ...f, phone: e.target.value })} /></Field>
+        <Field label="الهاتف"><input className="input num" dir="ltr" value={f.phone ?? ''} onChange={(e) => setF({ ...f, phone: e.target.value })} /></Field>
         <Field label="تاريخ الدخول"><input type="date" className="input" value={f.joined_at} onChange={(e) => setF({ ...f, joined_at: e.target.value })} /></Field>
         {isNew && <>
           <Field label="المرتب الشهري (ج.س)"><input className="input num" value={f.monthly_salary} onChange={(e) => setF({ ...f, monthly_salary: e.target.value.replace(/[^\d.]/g, '') })} /></Field>
@@ -146,11 +146,11 @@ function TermsModal({ s, onClose }: { s: Row; onClose: () => void }) {
   const hist = useLoad(() => db.list('shareholder_terms', { eq: { shareholder_id: s.id }, order: [{ col: 'effective_from', asc: false }, { col: 'created_at', asc: false }] }), [s.id])
   const [f, setF] = useState({ effective_from: today().slice(0, 8) + '01', monthly_salary: String(s.monthly_salary ?? ''), sales_pct: String(s.sales_pct ?? ''), profit_pct: String(s.profit_pct ?? '') })
   const save = async () => {
-    const ok = await run(() => db.insert('shareholder_terms', { shareholder_id: s.id, effective_from: f.effective_from, monthly_salary: Number(f.monthly_salary) || 0, sales_pct: Number(f.sales_pct) || 0, profit_pct: Number(f.profit_pct) || 0 }), 'النسب الجديدة اتسجلت — ووصل إشعار للأدمن')
+    const ok = await run(() => db.insert('shareholder_terms', { shareholder_id: s.id, effective_from: f.effective_from, monthly_salary: Number(f.monthly_salary) || 0, sales_pct: Number(f.sales_pct) || 0, profit_pct: Number(f.profit_pct) || 0 }), 'سُجِّلت النسب الجديدة — وأُرسل إشعار إلى مدير النظام')
     if (ok) onClose()
   }
   return (
-    <Modal open onClose={onClose} width="max-w-2xl" title={`تغيير نسب: ${s.full_name}`} subtitle="التعديل بيبدأ من التاريخ اللي تختاره، والشهور اللي قبله بتفضل بالنسب القديمة"
+    <Modal open onClose={onClose} width="max-w-2xl" title={`تغيير نسب: ${s.full_name}`} subtitle="يسري التعديل من التاريخ الذي تختاره، وتبقى الأشهر السابقة بالنسب القديمة"
       footer={<><button className="btn-ghost" onClick={onClose}>إلغاء</button><button className="btn-primary" disabled={busy} onClick={save}>حفظ النسب الجديدة</button></>}>
       <div className="grid grid-cols-4 gap-3">
         <Field label="ساري من"><input type="date" className="input" value={f.effective_from} onChange={(e) => setF({ ...f, effective_from: e.target.value })} /></Field>
@@ -161,7 +161,7 @@ function TermsModal({ s, onClose }: { s: Row; onClose: () => void }) {
       <div className="mt-6">
         <div className="font-bold text-sm mb-2 flex items-center gap-2"><History size={15} className="text-brand-500" /> سجل النسب</div>
         <table className="tbl">
-          <thead><tr><th>من</th><th>المرتب</th><th>المبيعات</th><th>الأرباح</th><th>اتسجل</th></tr></thead>
+          <thead><tr><th>من</th><th>المرتب</th><th>المبيعات</th><th>الأرباح</th><th>تم التسجيل</th></tr></thead>
           <tbody>{(hist.data ?? []).map((t: any) => (
             <tr key={t.id}><td>{date(t.effective_from)}</td><td><Money v={t.monthly_salary} cur={false} /></td><td className="num">{num(t.sales_pct, 2)}%</td><td className="num">{num(t.profit_pct, 2)}%</td><td className="text-zinc-500 text-[12px]">{date(t.created_at)}</td></tr>
           ))}</tbody>
