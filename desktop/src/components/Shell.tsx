@@ -181,7 +181,8 @@ function AttendanceButton() {
     try { await db.rpc(fn); toast(fn === 'check_in' ? 'سُجِّل حضورك — يومًا موفقًا' : 'سُجِّل انصرافك — في أمان الله'); reload() }
     catch (e: any) { toast(e.message, 'err') }
   }
-  if (!t) return <button onClick={() => act('check_in')} className="btn-sm btn bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25"><InIcon size={15} /> تسجيل حضور</button>
+  // سجل من غير وقت حضور (الأدمن عدّله قبل ما الموظف يسجل) = لسه مسجلش
+  if (!t?.check_in) return <button onClick={() => act('check_in')} className="btn-sm btn bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25"><InIcon size={15} /> تسجيل حضور</button>
   if (!t.check_out) return <button onClick={() => act('check_out')} className="btn-sm btn-ghost" title={`وقت الحضور ${time(t.check_in)}`}><OutIcon size={15} /> انصراف <span className="text-zinc-500 num text-[11px]">({time(t.check_in)})</span></button>
   return <span className="chip bg-ink-800 text-zinc-400 h-9 px-3 rounded-lg">انصرفتَ {time(t.check_out)}</span>
 }

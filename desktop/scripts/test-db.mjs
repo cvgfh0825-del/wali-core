@@ -8,7 +8,7 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const mig = (f) => readFileSync(path.join(here, '../../supabase/migrations', f), 'utf8')
 const db = new PGlite()
 await db.exec(readFileSync(path.join(here, '../src/demo/bootstrap.sql'), 'utf8'))
-for (const f of ['0001_core.sql', '0002_logic.sql', '0003_security_notify.sql', '0005_returns.sql', '0006_backup.sql', '0007_product_images.sql', '0008_fusha_messages.sql']) {
+for (const f of ['0001_core.sql', '0002_logic.sql', '0003_security_notify.sql', '0005_returns.sql', '0006_backup.sql', '0007_product_images.sql', '0008_fusha_messages.sql', '0010_check_in_fix.sql']) {
   try { await db.exec(mig(f)); console.log('✔', f) }
   catch (e) { console.error('✘', f, e.message, e.position ?? ''); process.exit(1) }
 }
@@ -135,8 +135,11 @@ ok(Number((await one(`select qty_on_hand from products where id=$1`, [p1])).qty_
 // موظفين وحضور ومرتبات
 const emp = (await one(`insert into employees(user_id, full_name, base_salary, commission_pct, commission_basis) values ($1,'سارة',300000,2,'own') returning id`, [seller])).id
 await one(`insert into employees(full_name, base_salary) values ('عامل مخزن', 200000) returning id`)
+// الأدمن عدّل حضور النهارده قبل ما الموظف يسجل → سجل من غير وقت حضور
+const day = (await one(`select local_today()::text d`)).d
+await one(`select admin_set_attendance($1::jsonb)`, [JSON.stringify({ employee_id: emp, work_date: day, status: 'present', note: '' })])
 await as(seller)
-await one(`select check_in()`)
+ok(!!(await one(`select check_in() a`)).a, 'الحضور بيتسجل حتى لو الأدمن عمل سجل لليوم من غير وقت')
 await expectErr(() => one(`select check_in()`), 'متسجلش حضور مرتين')
 await one(`select check_out()`)
 await as(admin)

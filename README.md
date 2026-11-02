@@ -27,6 +27,7 @@
 7. `supabase/migrations/0007_product_images.sql` (صور الأصناف في جدول لوحدها)
 8. `supabase/migrations/0008_fusha_messages.sql` (رسائل النظام والإشعارات بالفصحى)
 9. `supabase/migrations/0009_backup_storage.sql` (مخزن النسخ الاحتياطية التلقائية لنسخة الموقع)
+10. `supabase/migrations/0010_check_in_fix.sql` (تسجيل الحضور لو الأدمن عمل سجل لليوم قبل الموظف)
 
 ### 2) أول حساب (هيبقى Admin تلقائياً)
 من **Authentication ← Users ← Add user**:
