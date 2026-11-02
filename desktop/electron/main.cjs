@@ -55,7 +55,7 @@ function createWindow() {
 
 const defaultDir = () => (fs.existsSync('D:\\') ? 'D:\\WaliCore' : app.getPath('documents'))
 
-ipcMain.handle('save-pdf', async (_e, name) => {
+ipcMain.handle('save-pdf', async (_e, name, bare) => {
   const dir = path.join(defaultDir(), 'PDF')
   fs.mkdirSync(dir, { recursive: true })
   const { canceled, filePath } = await dialog.showSaveDialog(win, {
@@ -63,7 +63,7 @@ ipcMain.handle('save-pdf', async (_e, name) => {
     filters: [{ name: 'PDF', extensions: ['pdf'] }],
   })
   if (canceled || !filePath) return null
-  const data = await win.webContents.printToPDF({ pageSize: 'A4', printBackground: true, margins: { marginType: 'custom', top: 0.4, bottom: 0.4, left: 0.4, right: 0.4 } })
+  const data = await win.webContents.printToPDF({ pageSize: 'A4', printBackground: true, margins: bare ? { marginType: 'none' } : { marginType: 'custom', top: 0.4, bottom: 0.4, left: 0.4, right: 0.4 } })
   fs.writeFileSync(filePath, data)
   shell.openPath(filePath)
   return filePath

@@ -2,6 +2,7 @@ import { ReactNode, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import JsBarcode from 'jsbarcode'
 import { Row } from '../lib/backend'
+import invoiceTemplate from '../assets/invoice-template.jpg'
 import { sdg, date, num, usd, qty, METHOD } from '../lib/format'
 
 // بنرسم المستند جوه #print-root ونطبع؛ في Electron ممكن يتحفظ PDF كمان
@@ -13,12 +14,13 @@ export function PrintHost() {
   return createPortal(<div id="print-root">{node}</div>, document.body)
 }
 
-export async function printDoc(node: ReactNode, opts: { pdf?: string } = {}) {
+// bare: المستند نفسه مقاس A4 كامل (زي الفاتورة) فمن غير هوامش
+export async function printDoc(node: ReactNode, opts: { pdf?: string; bare?: boolean } = {}) {
   setPrintNode?.(node)
   await new Promise((r) => setTimeout(r, 250))
   const w = (window as any).wali
   try {
-    if (opts.pdf && w?.savePDF) await w.savePDF(opts.pdf)
+    if (opts.pdf && w?.savePDF) await w.savePDF(opts.pdf, opts.bare)
     else window.print()
   } finally {
     setTimeout(() => setPrintNode?.(null), 500)
@@ -56,57 +58,93 @@ function Header({ settings, title, number, dateStr, extra }: { settings: Row; ti
 const th: React.CSSProperties = { background: '#111', color: '#fff', padding: '8px 10px', fontSize: 12, textAlign: 'right' }
 const td: React.CSSProperties = { padding: '8px 10px', fontSize: 12, borderBottom: '1px solid #e5e5e5' }
 
-export function InvoiceDoc({ inv, items, settings }: { inv: Row; items: Row[]; settings: Row }) {
+// الفاتورة بتتطبع على تصميم والي بلازا نفسه (الصورة 1054×1492) والبيانات بتتحط فوق أماكنها
+const TPL_W = 1054, TPL_H = 1492
+const ROWS = 14, ROW_TOP = 618, ROW_H = 46
+const COLS = { desc: [612, 1006], qty: [500, 605], unit: [364, 493], vat: [235, 357], total: [55, 228] } as const
+const at = (x1: number, x2: number, y1: number, y2: number): React.CSSProperties => ({
+  position: 'absolute', left: `${(x1 / TPL_W) * 100}%`, width: `${((x2 - x1) / TPL_W) * 100}%`,
+  top: `${(y1 / TPL_H) * 100}%`, height: `${((y2 - y1) / TPL_H) * 100}%`,
+  display: 'flex', alignItems: 'center', overflow: 'hidden',
+})
+
+type Line = { name: string; qty?: any; unit?: any; total: any; bold?: boolean; red?: boolean }
+
+export function InvoiceDoc({ inv, items, settings: _settings }: { inv: Row; items: Row[]; settings: Row }) {
   const isPF = inv.kind === 'proforma'
+  const total = Number(inv.total_sdg), paid = Number(inv.paid_sdg)
+  const summary: Line[] = Number(inv.discount_sdg) > 0
+    ? [{ name: 'الإجمالي', total: inv.subtotal_sdg }, { name: 'الخصم', total: -Number(inv.discount_sdg) }, { name: 'الصافي', total, bold: true }]
+    : [{ name: 'الإجمالي', total, bold: true }]
+  if (!isPF && paid > 0) summary.push({ name: 'المدفوع', total: paid })
+  if (!isPF && total - paid > 0.5) summary.push({ name: 'المتبقي', total: total - paid, red: true })
+
+  const lines: Line[] = items.map((it) => ({ name: it.name, qty: it.qty, unit: it.unit_price_sdg, total: it.total_sdg }))
+  const pages: Line[][] = []
+  for (let i = 0; i < lines.length; i += ROWS) pages.push(lines.slice(i, i + ROWS))
+  if (!pages.length) pages.push([])
+  const last = pages[pages.length - 1]
+  if (last.length + summary.length > ROWS) pages.push(summary)
+  else last.push(...summary)
+
+  const text = (size: number, extra: React.CSSProperties = {}): React.CSSProperties => ({ fontSize: `${size}mm`, fontWeight: 700, color: '#111', ...extra })
   return (
-    <div style={{ fontFamily: '"IBM Plex Sans Arabic", sans-serif', direction: 'rtl', padding: 4, color: '#111' }}>
-      <Header settings={settings} title={isPF ? 'فاتورة مبدئية / عرض سعر' : 'فاتورة مبيعات'} number={inv.number} dateStr={date(inv.invoice_date)}
-        extra={inv.status === 'cancelled' ? <div style={{ color: '#c00', fontWeight: 900, marginTop: 4 }}>ملغية</div> : null} />
-      <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
-        <div style={{ flex: 1, background: '#f6f6f6', borderRadius: 8, padding: '10px 14px', fontSize: 12, lineHeight: 1.9 }}>
-          <div><b>العميل:</b> {inv.customer_name || 'عميل نقدي'}</div>
-          {inv.customer_phone && <div><b>الهاتف:</b> <span dir="ltr">{inv.customer_phone}</span></div>}
+    <>
+      <style>{'@page { size: A4; margin: 0 } #print-root { inset: 0 auto auto 0 !important }'}</style>
+      {pages.map((rows, pi) => (
+        <div key={pi} style={{ position: 'relative', width: '210mm', height: '296.5mm', overflow: 'hidden', direction: 'rtl', fontFamily: 'Cairo, "IBM Plex Sans Arabic", sans-serif', breakAfter: pi < pages.length - 1 ? 'page' : 'auto' }}>
+          <img src={invoiceTemplate} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
+          <div style={{ ...at(70, 386, 450, 478), ...text(4) }}>{inv.customer_name || 'عميل نقدي'}</div>
+          <div style={{ ...at(708, 914, 450, 478), ...text(3.8), justifyContent: 'center' }}>{date(inv.invoice_date)}</div>
+          <div style={{ ...at(560, 1000, 486, 514), ...text(3, { fontWeight: 600, color: '#444', gap: '1.5mm' }) }}>
+            <span>{isPF ? 'عرض سعر رقم' : 'فاتورة رقم'}</span><span dir="ltr">{inv.number}</span>
+            {inv.status === 'cancelled' && <span style={{ color: '#c00', fontWeight: 900 }}>— ملغية</span>}
+            {pages.length > 1 && <span>(صفحة {pi + 1} من {pages.length})</span>}
+          </div>
+          {rows.map((l, i) => {
+            const y1 = ROW_TOP + i * ROW_H, y2 = y1 + ROW_H
+            const cell = (c: readonly [number, number], v: any) => <div style={{ ...at(c[0] + 6, c[1] - 6, y1, y2), ...text(3.6, { justifyContent: 'center', color: l.red ? '#c00' : '#111', fontWeight: l.bold ? 900 : 700 }) }} dir="ltr">{v}</div>
+            return (
+              <div key={i}>
+                <div style={{ ...at(COLS.desc[0] + 10, COLS.desc[1] - 12, y1, y2), ...text(l.name.length > 38 ? 3 : 3.6, { lineHeight: 1.25, fontWeight: l.bold ? 900 : 700, color: l.red ? '#c00' : '#111' }) }}>{l.name}</div>
+                {l.qty != null && cell(COLS.qty, qty(l.qty))}
+                {l.unit != null && cell(COLS.unit, sdg(l.unit))}
+                {cell(COLS.total, Number(l.total) < 0 ? `− ${sdg(-Number(l.total))}` : sdg(l.total))}
+              </div>
+            )
+          })}
+          {pi === pages.length - 1 && (
+            <div style={{ ...at(62, 812, 1349, 1395), ...text(3.4, { lineHeight: 1.3 }) }}>فقط {tafqeet(total)} جنيه سوداني لا غير</div>
+          )}
         </div>
-        <div style={{ flex: 1, background: '#f6f6f6', borderRadius: 8, padding: '10px 14px', fontSize: 12, lineHeight: 1.9 }}>
-          <div><b>سعر الصرف:</b> 1$ = {num(inv.rate, 2)} ج.س</div>
-          <div><b>البائع:</b> {inv.salesperson_name ?? inv.created_by_name ?? ''}</div>
-        </div>
-      </div>
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <thead><tr>
-          <th style={{ ...th, width: 30 }}>#</th><th style={th}>الكود</th><th style={th}>الصنف</th><th style={th}>الموديل</th>
-          <th style={th}>الكمية</th><th style={th}>سعر الوحدة</th><th style={th}>الإجمالي</th>
-        </tr></thead>
-        <tbody>
-          {items.map((it, i) => (
-            <tr key={it.id ?? i} style={{ background: i % 2 ? '#fafafa' : '#fff' }}>
-              <td style={td}>{i + 1}</td><td style={td} dir="ltr">{it.code}</td><td style={{ ...td, fontWeight: 600 }}>{it.name}</td>
-              <td style={td}>{it.model}</td><td style={td}>{qty(it.qty)}</td>
-              <td style={td}>{sdg(it.unit_price_sdg)}</td><td style={{ ...td, fontWeight: 700 }}>{sdg(it.total_sdg)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
-        <table style={{ width: 300, fontSize: 13, borderCollapse: 'collapse' }}>
-          <tbody>
-            <tr><td style={{ padding: 6 }}>الإجمالي</td><td style={{ padding: 6, textAlign: 'left' }}>{sdg(inv.subtotal_sdg)} ج.س</td></tr>
-            {Number(inv.discount_sdg) > 0 && <tr><td style={{ padding: 6 }}>الخصم</td><td style={{ padding: 6, textAlign: 'left' }}>− {sdg(inv.discount_sdg)}</td></tr>}
-            <tr style={{ background: '#111', color: '#fff', fontWeight: 900 }}><td style={{ padding: 8 }}>الصافي</td><td style={{ padding: 8, textAlign: 'left' }}>{sdg(inv.total_sdg)} ج.س</td></tr>
-            {!isPF && <tr><td style={{ padding: 6 }}>المدفوع</td><td style={{ padding: 6, textAlign: 'left' }}>{sdg(inv.paid_sdg)}</td></tr>}
-            {!isPF && Number(inv.total_sdg) - Number(inv.paid_sdg) > 0 && <tr style={{ color: '#c00', fontWeight: 700 }}><td style={{ padding: 6 }}>المتبقي</td><td style={{ padding: 6, textAlign: 'left' }}>{sdg(Number(inv.total_sdg) - Number(inv.paid_sdg))}</td></tr>}
-          </tbody>
-        </table>
-      </div>
-      {isPF && <div style={{ marginTop: 16, fontSize: 11, color: '#555', border: '1px dashed #bbb', borderRadius: 8, padding: 10 }}>
-        الأسعار بالجنيه محسوبة على سعر الدولار يوم إصدار العرض، وممكن تتغير بتغيّر سعر الصرف لحد تأكيد الطلب.</div>}
-      {inv.notes && <div style={{ marginTop: 12, fontSize: 12 }}><b>ملاحظات:</b> {inv.notes}</div>}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 40, fontSize: 12 }}>
-        <div>توقيع المستلم: ..............................</div><div>ختم الشركة: ..............................</div>
-      </div>
-      <div style={{ marginTop: 30, textAlign: 'center', fontSize: 11, color: '#777', borderTop: '1px solid #eee', paddingTop: 10 }}>{settings.invoice_footer}</div>
-    </div>
+      ))}
+    </>
   )
+}
+
+// المبلغ بالحروف
+const ONES = ['', 'واحد', 'اثنان', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة', 'عشرة', 'أحد عشر', 'اثنا عشر', 'ثلاثة عشر', 'أربعة عشر', 'خمسة عشر', 'ستة عشر', 'سبعة عشر', 'ثمانية عشر', 'تسعة عشر']
+const TENS = ['', '', 'عشرون', 'ثلاثون', 'أربعون', 'خمسون', 'ستون', 'سبعون', 'ثمانون', 'تسعون']
+const HUNDREDS = ['', 'مائة', 'مائتان', 'ثلاثمائة', 'أربعمائة', 'خمسمائة', 'ستمائة', 'سبعمائة', 'ثمانمائة', 'تسعمائة']
+const SCALES = [['', '', ''], ['ألف', 'ألفان', 'آلاف'], ['مليون', 'مليونان', 'ملايين'], ['مليار', 'ملياران', 'مليارات']]
+
+function under1000(n: number) {
+  const r = n % 100, t = Math.floor(r / 10), o = r % 10
+  const rest = r < 20 ? ONES[r] : o ? `${ONES[o]} و${TENS[t]}` : TENS[t]
+  return [HUNDREDS[Math.floor(n / 100)], rest].filter(Boolean).join(' و')
+}
+
+export function tafqeet(v: number) {
+  let n = Math.round(Math.abs(v))
+  if (!n) return 'صفر'
+  const parts: string[] = []
+  for (let s = 0; n > 0 && s < SCALES.length; s++, n = Math.floor(n / 1000)) {
+    const g = n % 1000
+    if (!g) continue
+    const [one, two, many] = SCALES[s]
+    parts.unshift(!s ? under1000(g) : g === 1 ? one : g === 2 ? two : g <= 10 ? `${under1000(g)} ${many}` : `${under1000(g)} ${one}`)
+  }
+  return parts.join(' و')
 }
 
 export function DeliveryDoc({ permit, items, settings }: { permit: Row; items: Row[]; settings: Row }) {

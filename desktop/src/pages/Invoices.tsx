@@ -113,7 +113,7 @@ export function InvoiceDrawer({ id, onClose, onOpen }: { id: string; onClose: ()
   const returned = Number(inv?.returned_sdg ?? 0)
   const canReturn = inv?.kind === 'final' && inv?.status === 'posted' && can('sales', 'cancel')
     && (data?.items ?? []).some((i: any) => Number(i.qty) > Number(i.returned_qty ?? 0))
-  const print = (pdf = false) => inv && printDoc(<InvoiceDoc inv={inv} items={data!.items} settings={settings} />, pdf ? { pdf: inv.number } : {})
+  const print = (pdf = false) => inv && printDoc(<InvoiceDoc inv={inv} items={data!.items} settings={settings} />, pdf ? { pdf: inv.number, bare: true } : {})
 
   const cancel = async () => {
     const reason = await confirm.ask(`إلغاء الفاتورة ${inv!.number}؟`, { danger: true, reason: true, text: inv!.kind === 'final' ? 'البضاعة هترجع المخزن، ولو في فلوس اتدفعت هتتسجل كمرتجع للعميل.' : undefined })
