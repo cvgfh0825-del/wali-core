@@ -1,0 +1,5 @@
+{
+  "installCommand": "cd desktop && ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm install",
+  "buildCommand": "cd desktop && npm run build",
+  "outputDirectory": "desktop/dist"
+}
