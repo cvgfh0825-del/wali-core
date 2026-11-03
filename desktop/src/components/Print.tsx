@@ -117,7 +117,7 @@ export function InvoiceDoc({ inv, items, settings: _settings }: { inv: Row; item
           <div style={{ ...at(70, 386, 450, 478), ...text(4) }}>{inv.customer_name || 'عميل نقدي'}</div>
           <div style={{ ...at(708, 914, 450, 478), ...text(3.8), justifyContent: 'center' }}>{date(inv.invoice_date)}</div>
           <div style={{ ...at(560, 1000, 486, 514), ...text(3, { fontWeight: 600, color: '#444', gap: '1.5mm' }) }}>
-            <span>{isPF ? 'عرض سعر رقم' : 'فاتورة رقم'}</span><span dir="ltr">{inv.number}</span>
+            <span>{isPF ? 'فاتورة مبدئية رقم' : 'فاتورة رقم'}</span><span dir="ltr">{inv.number}</span>
             {inv.status === 'cancelled' && <span style={{ color: '#c00', fontWeight: 900 }}>— ملغية</span>}
             {pages.length > 1 && <span>(الصفحة {pi + 1} من {pages.length})</span>}
           </div>

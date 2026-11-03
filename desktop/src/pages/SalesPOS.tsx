@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Trash2, FileClock, CheckCircle2, Printer, X, AlertTriangle, Search, Plus } from 'lucide-react'
 import { useApp, useLoad, useAction } from '../lib/app'
-import { Field, Modal, Segmented, NoAccess } from '../components/ui'
+import { Modal, NoAccess } from '../components/ui'
 import { printDoc, InvoiceDoc, tafqeet } from '../components/Print'
 import { qty, sdg } from '../lib/format'
 import type { Row, Backend } from '../lib/backend'
@@ -31,9 +31,6 @@ export default function SalesPOS() {
   const nextNo = useLoad(() => (id ? db.get('invoices', id).then((r) => r?.number ?? '') : db.rpc<string>('peek_doc_number', { p_kind: 'proforma' })), [id], ['invoices'])
   const setField = (k: keyof Fields, v: string) => setFields((f) => ({ ...f, [k]: v }))
   const [discount, setDiscount] = useState('')
-  const [paid, setPaid] = useState('')
-  const [payMode, setPayMode] = useState<'full' | 'partial' | 'credit'>('full')
-  const [method, setMethod] = useState('cash')
   const [notes, setNotes] = useState('')
   const [done, setDone] = useState<Row | null>(null)
   const { busy, run } = useAction()
@@ -62,7 +59,6 @@ export default function SalesPOS() {
   const priceOf = (l: Line) => l.price_sdg ?? Math.round(Number(l.product?.price_usd ?? 0) * (rate ?? 0) * 100) / 100
   const subtotal = filled.reduce((s, l) => s + priceOf(l) * l.qty, 0)
   const total = Math.max(0, subtotal - (Number(discount) || 0))
-  const paidVal = payMode === 'full' ? total : payMode === 'credit' ? 0 : Math.min(Number(paid) || 0, total)
 
   const patch = (key: number, p: Partial<Line>) => setLines((ls) => {
     const next = ls.map((l) => (l.key === key ? { ...l, ...p } : l))
@@ -71,17 +67,18 @@ export default function SalesPOS() {
   })
   const removeLine = (key: number) => setLines((ls) => { const n = ls.filter((l) => l.key !== key); return n.length && !n[n.length - 1].product ? n : [...n, blank()] })
 
-  const save = async (kind: 'proforma' | 'final') => {
+  // شاشة البيع بتعمل فواتير مبدئية بس — التحويل لنهائية والدفع من صفحة الفواتير
+  const save = async () => {
     const inv = await run(() => db.rpc<Row>('save_invoice', { p: {
-      id: id ?? null, kind,
+      id: id ?? null, kind: 'proforma',
       customer_id: customer.id ?? null, customer_name: customer.name || null, customer_phone: customer.phone || null,       print_fields: { ...fields, title }, invoice_date: invDate || null,
-      discount_sdg: Number(discount) || 0, paid_sdg: kind === 'final' ? paidVal : 0, method, notes: notes || null,
+      discount_sdg: Number(discount) || 0, notes: notes || null,
       items: filled.map((l) => ({ product_id: l.product!.id, qty: l.qty, ...(l.price_sdg != null && canPrice ? { unit_price_sdg: l.price_sdg } : {}) })),
     } }))
     if (inv) {
       try { localStorage.setItem('wali-invoice-fields', JSON.stringify(fields)) } catch { /* */ }
       setDone(inv)
-      setLines([blank()]); setCustomer({ name: '', phone: '' }); setInvDate(today()); setTitle('السيد'); setDiscount(''); setPaid(''); setNotes(''); setPayMode('full')
+      setLines([blank()]); setCustomer({ name: '', phone: '' }); setInvDate(today()); setTitle('السيد'); setDiscount(''); setNotes('')
       if (id) nav('/sales', { replace: true })
     }
   }
@@ -213,21 +210,13 @@ export default function SalesPOS() {
 
       {/* الدفع والحفظ */}
       <div className="card p-4 space-y-3 2xl:sticky 2xl:top-0 max-w-[980px] w-full mx-auto">
-        <div className="font-bold">الدفع</div>
-        <Segmented value={payMode} onChange={setPayMode} items={[{ key: 'full', label: 'نقدًا بالكامل' }, { key: 'partial', label: 'دفع جزئي' }, { key: 'credit', label: 'آجل' }]} />
-        {payMode === 'partial' && <Field label="المبلغ المدفوع"><input className="input h-10 num" value={paid} onChange={(e) => setPaid(e.target.value.replace(/[^\d.]/g, ''))} /></Field>}
-        {payMode !== 'credit' && (
-          <Field label="طريقة الدفع"><select className="input h-10" value={method} onChange={(e) => setMethod(e.target.value)}>
-            <option value="cash">نقدًا</option><option value="bank">بنك</option><option value="transfer">تحويل بنكي / بنكك</option><option value="cheque">شيك</option>
-          </select></Field>
-        )}
+        <div className="font-bold">فاتورة مبدئية</div>
+        <p className="text-[13px] text-zinc-400 leading-6">تتحول إلى فاتورة نهائية ويُسجَّل الدفع من صفحة الفواتير.</p>
         <div className="rounded-xl bg-ink-950 border border-ink-700 p-4 space-y-1.5">
           <div className="flex justify-between text-sm text-zinc-400"><span>{filled.length} صنف · {filled.reduce((s, l) => s + l.qty, 0)} قطعة</span></div>
           <div className="flex justify-between items-end"><span className="font-bold">الصافي</span><span className="num text-[26px] font-black text-brand-400 leading-none">{sdg(total)} <span className="text-sm text-zinc-500 font-sans">ج.س</span></span></div>
-          {payMode !== 'full' && <div className="flex justify-between text-[13px] text-red-300"><span>المتبقي على العميل</span><span className="num">{sdg(total - paidVal)}</span></div>}
         </div>
-        <button className="btn-primary h-12 w-full" disabled={busy || !filled.length || !rate || !!id} onClick={() => save('final')}><CheckCircle2 size={18} /> فاتورة نهائية</button>
-        <button className="btn-ghost h-12 w-full" disabled={busy || !filled.length || !rate} onClick={() => save('proforma')}><FileClock size={18} /> {id ? 'حفظ التعديل' : 'فاتورة مبدئية'}</button>
+        <button className="btn-primary h-12 w-full" disabled={busy || !filled.length || !rate} onClick={save}><FileClock size={18} /> {id ? 'حفظ التعديل' : 'حفظ الفاتورة المبدئية'}</button>
       </div>
 
       <Modal open={!!done} onClose={() => setDone(null)} width="max-w-md" title="">
