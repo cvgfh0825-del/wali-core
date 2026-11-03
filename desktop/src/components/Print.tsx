@@ -61,6 +61,7 @@ const td: React.CSSProperties = { padding: '8px 10px', fontSize: 12, borderBotto
 // الفاتورة بتتطبع على تصميم والي بلازا نفسه (الصورة 1054×1492) والبيانات بتتحط فوق أماكنها
 const TPL_W = 1054, TPL_H = 1492
 const ROWS = 14, ROW_TOP = 618, ROW_H = 46
+const TPL_TAX = '300000599652', TPL_OKASH = '2055534'   // المطبوع في التصميم نفسه
 const COLS = { desc: [612, 1006], qty: [500, 605], unit: [364, 493], vat: [235, 357], total: [55, 228] } as const
 const at = (x1: number, x2: number, y1: number, y2: number): React.CSSProperties => ({
   position: 'absolute', left: `${(x1 / TPL_W) * 100}%`, width: `${((x2 - x1) / TPL_W) * 100}%`,
@@ -72,6 +73,7 @@ type Line = { name: string; qty?: any; unit?: any; total: any; bold?: boolean; r
 
 export function InvoiceDoc({ inv, items, settings: _settings }: { inv: Row; items: Row[]; settings: Row }) {
   const isPF = inv.kind === 'proforma'
+  const pf: Row = inv.print_fields ?? {}
   const total = Number(inv.total_sdg), paid = Number(inv.paid_sdg)
   const summary: Line[] = Number(inv.discount_sdg) > 0
     ? [{ name: 'الإجمالي', total: inv.subtotal_sdg }, { name: 'الخصم', total: -Number(inv.discount_sdg) }, { name: 'الصافي', total, bold: true }]
@@ -94,6 +96,21 @@ export function InvoiceDoc({ inv, items, settings: _settings }: { inv: Row; item
       {pages.map((rows, pi) => (
         <div key={pi} style={{ position: 'relative', width: '210mm', height: '296.5mm', overflow: 'hidden', direction: 'rtl', fontFamily: 'Cairo, "IBM Plex Sans Arabic", sans-serif', breakAfter: pi < pages.length - 1 ? 'page' : 'auto' }}>
           <img src={invoiceTemplate} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
+          {/* خانات اتكتبت في شاشة الفاتورة: لو اتغيرت عن المطبوع في التصميم بنغطيه ونكتب الجديد */}
+          {pf.company_tax_id != null && pf.company_tax_id !== TPL_TAX && (
+            <div style={{ ...at(677, 990, 388, 418), background: '#fff', display: 'flex', direction: 'ltr', border: '1.5px solid #222' }}>
+              {Array.from({ length: 12 }).map((_, i) => (
+                <div key={i} style={{ flex: 1, height: '100%', borderLeft: i ? '1px solid #555' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', ...text(4.2) }}>{String(pf.company_tax_id)[i] ?? ''}</div>
+              ))}
+            </div>
+          )}
+          {pf.okash != null && pf.okash !== TPL_OKASH && (
+            <div style={{ ...at(640, 790, 1300, 1340), background: '#fff', ...text(5, { fontWeight: 900, justifyContent: 'center' }) }} dir="ltr">{pf.okash}</div>
+          )}
+          {pf.bank_khartoum && <div style={{ ...at(80, 305, 1300, 1326), ...text(3.8, { justifyContent: 'center' }) }} dir="ltr">{pf.bank_khartoum}</div>}
+          {String(inv.customer_tax_id ?? '').slice(0, 12).split('').map((d, i) => (
+            <div key={i} style={{ ...at(74 + i * 26.2, 100 + i * 26.2, 380, 414), ...text(4.2), justifyContent: 'center' }}>{d}</div>
+          ))}
           <div style={{ ...at(70, 386, 450, 478), ...text(4) }}>{inv.customer_name || 'عميل نقدي'}</div>
           <div style={{ ...at(708, 914, 450, 478), ...text(3.8), justifyContent: 'center' }}>{date(inv.invoice_date)}</div>
           <div style={{ ...at(560, 1000, 486, 514), ...text(3, { fontWeight: 600, color: '#444', gap: '1.5mm' }) }}>

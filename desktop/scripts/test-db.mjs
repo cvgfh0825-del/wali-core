@@ -8,7 +8,7 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const mig = (f) => readFileSync(path.join(here, '../../supabase/migrations', f), 'utf8')
 const db = new PGlite()
 await db.exec(readFileSync(path.join(here, '../src/demo/bootstrap.sql'), 'utf8'))
-for (const f of ['0001_core.sql', '0002_logic.sql', '0003_security_notify.sql', '0005_returns.sql', '0006_backup.sql', '0007_product_images.sql', '0008_fusha_messages.sql', '0010_check_in_fix.sql']) {
+for (const f of ['0001_core.sql', '0002_logic.sql', '0003_security_notify.sql', '0005_returns.sql', '0006_backup.sql', '0007_product_images.sql', '0008_fusha_messages.sql', '0010_check_in_fix.sql', '0011_customer_tax_id.sql', '0012_invoice_fields.sql']) {
   try { await db.exec(mig(f)); console.log('✔', f) }
   catch (e) { console.error('✘', f, e.message, e.position ?? ''); process.exit(1) }
 }
@@ -56,7 +56,7 @@ ok(Math.abs(Number(pr2a.cost_usd) - 60) < 0.01, 'تكلفة الكرسي 50$ + 2
 
 // فاتورة مبدئية من يوزر المعرض
 await as(seller)
-const pf = await one(`select * from save_invoice($1)`, [{ kind: 'proforma', customer_name: 'شركة النيل', customer_phone: '0911', items: [{ product_id: p1, qty: 2 }, { product_id: p2, qty: 4 }] }])
+const pf = await one(`select * from save_invoice($1)`, [{ kind: 'proforma', customer_name: 'شركة النيل', customer_phone: '0911', customer_tax_id: '300123456789', print_fields: { okash: '999' }, items: [{ product_id: p1, qty: 2 }, { product_id: p2, qty: 4 }] }])
 ok(pf.number.startsWith('PF-'), 'رقم المبدئية ' + pf.number)
 await expectErr(() => one(`select set_exchange_rate(3000)`), 'سارة متقدرش تغير الريت')
 await expectErr(() => one(`select cancel_invoice($1,'x')`, [pf.id]), 'سارة متقدرش تلغي')
@@ -68,6 +68,8 @@ ok(Number(resv.reserved_qty) === 2, 'المحجوز في المبدئيات = 2'
 await as(admin)
 await one(`select set_exchange_rate(2600)`)
 const fin = await one(`select * from convert_proforma($1, 1000000)`, [pf.id])
+ok(pf.customer_tax_id === '300123456789' && fin.customer_tax_id === '300123456789', 'الرقم الضريبي للعميل بيتحفظ وبيتنقل للفاتورة النهائية')
+ok(pf.print_fields?.okash === '999' && fin.print_fields?.okash === '999', 'خانات الفاتورة بتتحفظ وبتتنقل للنهائية')
 ok(fin.kind === 'final' && fin.status === 'posted', 'المبدئية اتحولت لنهائية ' + fin.number)
 ok(Number(fin.rate) === 2600, 'النهائية بريت 2600')
 ok(fin.payment_type === 'partial' && Number(fin.paid_sdg) === 1000000, 'دفع جزئي 1,000,000')

@@ -70,6 +70,8 @@ input, textarea, [contenteditable], .selectable { user-select: text; }
   .tbl th { @apply text-right font-semibold text-zinc-400 text-[12px] px-4 py-3 bg-ink-900/60 border-b border-ink-700 sticky top-0 z-10 backdrop-blur; }
   .tbl td { @apply px-4 py-3 border-b border-ink-700/60 text-zinc-200; }
   .tbl tbody tr { @apply transition hover:bg-ink-800/70; }
+  /* خانات شاشة الفاتورة (ورقة بيضا) */
+  .cell { @apply h-10 px-2 bg-transparent outline-none text-[14px] text-[#111] rounded-lg flex items-center justify-center focus:bg-orange-50 focus:ring-2 focus:ring-brand-500/50 disabled:cursor-not-allowed; }
   .num { font-family: 'Cairo', 'IBM Plex Sans Arabic', sans-serif; font-variant-numeric: tabular-nums; }
 }
 

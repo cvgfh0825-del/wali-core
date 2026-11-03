@@ -8,16 +8,22 @@ import m6 from '../../../supabase/migrations/0006_backup.sql?raw'
 import m7 from '../../../supabase/migrations/0007_product_images.sql?raw'
 import m8 from '../../../supabase/migrations/0008_fusha_messages.sql?raw'
 import m10 from '../../../supabase/migrations/0010_check_in_fix.sql?raw'
+import m11 from '../../../supabase/migrations/0011_customer_tax_id.sql?raw'
+import m12 from '../../../supabase/migrations/0012_invoice_fields.sql?raw'
 
 // نسخة تجربة قديمة محفوظة في الجهاز → نضيفلها التحديثات الجديدة
 export async function upgradeDemo(db: any) {
   const r = await db.query(`select to_regclass('public.sales_returns') is not null as m5,
                                    to_regclass('public.product_images') is not null as m7,
                                    exists (select 1 from pg_proc where proname = 'check_out' and prosrc like '%لا يوجد حضور%') as m8,
-                                   exists (select 1 from pg_proc where proname = 'check_in' and prosrc like '%do update%') as m10`)
-  const { m5: has5, m7: has7, m8: has8, m10: has10 } = r.rows[0]
-  if (has10) return false
-  if (has8) { await db.exec(m10); return true }
+                                   exists (select 1 from pg_proc where proname = 'check_in' and prosrc like '%do update%') as m10,
+                                   exists (select 1 from information_schema.columns where table_name = 'invoices' and column_name = 'customer_tax_id') as m11,
+                                   exists (select 1 from information_schema.columns where table_name = 'invoices' and column_name = 'print_fields') as m12`)
+  const { m5: has5, m7: has7, m8: has8, m10: has10, m11: has11, m12: has12 } = r.rows[0]
+  if (has12) return false
+  if (has11) { await db.exec(m12); return true }
+  if (has10) { await db.exec(m11); await db.exec(m12); return true }
+  if (has8) { await db.exec(m10); await db.exec(m11); await db.exec(m12); return true }
   if (!has7) {
     await db.exec(m3)
     if (!has5) await db.exec(m5)
@@ -26,6 +32,8 @@ export async function upgradeDemo(db: any) {
   }
   await db.exec(m8)
   await db.exec(m10)
+  await db.exec(m11)
+  await db.exec(m12)
   return true
 }
 
@@ -84,6 +92,8 @@ export async function setupDemo(db: any, onProgress?: (m: string) => void) {
   await db.exec(m7)
   await db.exec(m8)
   await db.exec(m10)
+  await db.exec(m11)
+  await db.exec(m12)
   await db.exec(`create table if not exists demo_passwords (username text primary key, password text not null)`)
 
   onProgress?.('جارٍ إضافة المستخدمين...')
