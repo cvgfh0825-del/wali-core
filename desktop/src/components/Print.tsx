@@ -2,6 +2,7 @@ import { ReactNode, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Row } from '../lib/backend'
 import invoiceTemplate from '../assets/invoice-template.jpg'
+import siteLogo from '../assets/logo.png'
 import { sdg, date, num, usd, qty, METHOD } from '../lib/format'
 
 // بنرسم المستند جوه #print-root ونطبع؛ في Electron ممكن يتحفظ PDF كمان
@@ -32,10 +33,7 @@ function Header({ settings, title, number, dateStr, extra }: { settings: Row; ti
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: `3px solid ${brand}`, paddingBottom: 14, marginBottom: 18 }}>
       <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-        {settings.logo ? <img src={settings.logo} style={{ width: 64, height: 64, objectFit: 'contain' }} /> : (
-          <svg width="60" height="60" viewBox="0 0 256 256"><rect x="8" y="8" width="240" height="240" rx="56" fill="#111" />
-            <path d="M52 78 L88 186 L128 104 L168 186 L204 78" fill="none" stroke={brand} strokeWidth="26" strokeLinecap="round" strokeLinejoin="round" /><circle cx="128" cy="56" r="13" fill={brand} /></svg>
-        )}
+        <img src={settings.logo || siteLogo} style={{ width: 92, height: 72, objectFit: 'contain' }} />
         <div>
           <div style={{ fontFamily: 'Cairo', fontWeight: 900, fontSize: 22 }}>{settings.company_name} <span style={{ color: '#888', fontSize: 14, fontWeight: 700 }}>{settings.company_name_en}</span></div>
           <div style={{ fontSize: 11, color: '#555', marginTop: 4, lineHeight: 1.7 }}>
@@ -161,8 +159,9 @@ export function tafqeet(v: number) {
   for (let s = 0; n > 0 && s < SCALES.length; s++, n = Math.floor(n / 1000)) {
     const g = n % 1000
     if (!g) continue
-    const [one, two, many] = SCALES[s]
-    parts.unshift(!s ? under1000(g) : g === 1 ? one : g === 2 ? two : g <= 10 ? `${under1000(g)} ${many}` : `${under1000(g)} ${one}`)
+    const [one, , many] = SCALES[s]
+    // «اثنان مليون» و«اثنان ألف» مش «مليونان» و«ألفان» — زي ما والي بلازا بتكتبها
+    parts.unshift(!s ? under1000(g) : g === 1 ? one : g >= 3 && g <= 10 ? `${under1000(g)} ${many}` : `${under1000(g)} ${one}`)
   }
   return parts.join(' و')
 }
