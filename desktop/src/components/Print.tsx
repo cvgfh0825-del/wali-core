@@ -108,9 +108,8 @@ export function InvoiceDoc({ inv, items, settings: _settings }: { inv: Row; item
             <div style={{ ...at(640, 790, 1300, 1340), background: '#fff', ...text(5, { fontWeight: 900, justifyContent: 'center' }) }} dir="ltr">{pf.okash}</div>
           )}
           {pf.bank_khartoum && <div style={{ ...at(80, 305, 1300, 1326), ...text(3.8, { justifyContent: 'center' }) }} dir="ltr">{pf.bank_khartoum}</div>}
-          {String(inv.customer_tax_id ?? '').slice(0, 12).split('').map((d, i) => (
-            <div key={i} style={{ ...at(74 + i * 26.2, 100 + i * 26.2, 380, 414), ...text(4.2), justifyContent: 'center' }}>{d}</div>
-          ))}
+          {/* خانة الرقم الضريبي التانية (الشمال) مش مستخدمة — بتتغطى في الطباعة */}
+          <div style={{ ...at(55, 405, 335, 424), background: '#fcfcfc' }} />
           <div style={{ ...at(70, 386, 450, 478), ...text(4) }}>{inv.customer_name || 'عميل نقدي'}</div>
           <div style={{ ...at(708, 914, 450, 478), ...text(3.8), justifyContent: 'center' }}>{date(inv.invoice_date)}</div>
           <div style={{ ...at(560, 1000, 486, 514), ...text(3, { fontWeight: 600, color: '#444', gap: '1.5mm' }) }}>

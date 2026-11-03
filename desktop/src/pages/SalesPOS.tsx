@@ -24,7 +24,6 @@ export default function SalesPOS() {
   const nav = useNavigate()
   const [lines, setLines] = useState<Line[]>([blank()])
   const [customer, setCustomer] = useState<{ id?: string; name: string; phone: string }>({ name: '', phone: '' })
-  const [taxId, setTaxId] = useState('')
   const [fields, setFields] = useState<Fields>(loadFields)
   const [invDate, setInvDate] = useState(today())
   const setField = (k: keyof Fields, v: string) => setFields((f) => ({ ...f, [k]: v }))
@@ -49,7 +48,6 @@ export default function SalesPOS() {
       const ls = items.map((i: any) => ({ key: ++seq, product: prods.find((p: any) => p.id === i.product_id)!, qty: Number(i.qty) })).filter((l: Line) => l.product)
       setLines([...ls, blank()])
       setCustomer({ id: inv.customer_id ?? undefined, name: inv.customer_name ?? '', phone: inv.customer_phone ?? '' })
-      setTaxId(inv.customer_tax_id ?? '')
       if (inv.print_fields) setFields({ ...FIELD_DEFAULTS, ...inv.print_fields })
       if (inv.invoice_date) setInvDate(String(inv.invoice_date).slice(0, 10))
       setDiscount(Number(inv.discount_sdg) ? String(inv.discount_sdg) : '')
@@ -73,15 +71,14 @@ export default function SalesPOS() {
   const save = async (kind: 'proforma' | 'final') => {
     const inv = await run(() => db.rpc<Row>('save_invoice', { p: {
       id: id ?? null, kind,
-      customer_id: customer.id ?? null, customer_name: customer.name || null, customer_phone: customer.phone || null, customer_tax_id: taxId || null,
-      print_fields: fields, invoice_date: invDate || null,
+      customer_id: customer.id ?? null, customer_name: customer.name || null, customer_phone: customer.phone || null,       print_fields: fields, invoice_date: invDate || null,
       discount_sdg: Number(discount) || 0, paid_sdg: kind === 'final' ? paidVal : 0, method, notes: notes || null,
       items: filled.map((l) => ({ product_id: l.product!.id, qty: l.qty, ...(l.price_sdg != null && canPrice ? { unit_price_sdg: l.price_sdg } : {}) })),
     } }))
     if (inv) {
       try { localStorage.setItem('wali-invoice-fields', JSON.stringify(fields)) } catch { /* */ }
       setDone(inv)
-      setLines([blank()]); setCustomer({ name: '', phone: '' }); setTaxId(''); setInvDate(today()); setDiscount(''); setPaid(''); setNotes(''); setPayMode('full')
+      setLines([blank()]); setCustomer({ name: '', phone: '' }); setInvDate(today()); setDiscount(''); setPaid(''); setNotes(''); setPayMode('full')
       if (id) nav('/sales', { replace: true })
     }
   }
@@ -109,15 +106,11 @@ export default function SalesPOS() {
           {!rate && <div className="mb-3 flex items-center gap-2 text-[13px] font-bold text-amber-700 bg-amber-100 rounded-lg px-3 py-2"><AlertTriangle size={15} /> أدخل سعر صرف اليوم أولًا</div>}
           {id && <div className="mb-3 text-[13px] font-bold text-brand-600">تعديل فاتورة مبدئية</div>}
 
-          {/* الرقم الضريبي */}
-          <div className="flex justify-between items-end gap-6">
+          {/* الرقم الضريبي للشركة */}
+          <div className="flex items-end">
             <div className="text-center">
               <div className="font-black text-[15px] mb-1.5">الرقم التعريفي الضريبي</div>
               <TaxBoxes value={fields.company_tax_id} onChange={(v) => setField('company_tax_id', v)} />
-            </div>
-            <div className="text-center">
-              <div className="font-black text-[15px] mb-1.5">الرقم التعريفي الضريبي</div>
-              <TaxBoxes value={taxId} onChange={setTaxId} />
             </div>
           </div>
 
