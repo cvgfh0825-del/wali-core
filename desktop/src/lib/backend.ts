@@ -163,7 +163,7 @@ const kv = {
   },
 }
 // دوال القراءة بس — مبتغيرش حاجة، فمش لازم تنبّه الشاشات تعيد التحميل
-const READ_ONLY_RPC = new Set(['current_rate', 'latest_rate', 'has_perm', 'is_admin', 'dashboard', 'annual_report', 'my_employee', 'shareholder_terms_at', 'period_sales', 'export_backup'])
+const READ_ONLY_RPC = new Set(['current_rate', 'latest_rate', 'has_perm', 'is_admin', 'dashboard', 'annual_report', 'my_employee', 'shareholder_terms_at', 'period_sales', 'export_backup', 'peek_doc_number'])
 
 const ident = (s: string) => {
   if (!/^[a-z_][a-z0-9_]*$/.test(s)) throw new Error('اسم غير صالح: ' + s)

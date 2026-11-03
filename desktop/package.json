@@ -25,7 +25,6 @@
     "autoprefixer": "10.4.20",
     "electron": "33.0.2",
     "electron-builder": "25.1.8",
-    "jsbarcode": "3.11.6",
     "lucide-react": "0.453.0",
     "postcss": "8.4.47",
     "react": "18.3.1",

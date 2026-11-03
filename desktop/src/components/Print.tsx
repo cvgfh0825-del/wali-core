@@ -1,6 +1,5 @@
 import { ReactNode, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import JsBarcode from 'jsbarcode'
 import { Row } from '../lib/backend'
 import invoiceTemplate from '../assets/invoice-template.jpg'
 import { sdg, date, num, usd, qty, METHOD } from '../lib/format'
@@ -108,6 +107,11 @@ export function InvoiceDoc({ inv, items, settings: _settings }: { inv: Row; item
             <div style={{ ...at(640, 790, 1300, 1340), background: '#fff', ...text(5, { fontWeight: 900, justifyContent: 'center' }) }} dir="ltr">{pf.okash}</div>
           )}
           {pf.bank_khartoum && <div style={{ ...at(80, 305, 1300, 1326), ...text(3.8, { justifyContent: 'center' }) }} dir="ltr">{pf.bank_khartoum}</div>}
+          {/* «الاجمالية» في التصميم ← «الإجمالي» */}
+          <div style={{ ...at(62, 220, 539, 597), background: '#f7711c', flexDirection: 'column', justifyContent: 'center', color: '#fff', fontWeight: 900, lineHeight: 1.15 }}>
+            <span style={{ fontSize: '4.2mm' }}>الإجمالي</span><span style={{ fontSize: '3.4mm', fontWeight: 700 }}>Total</span>
+          </div>
+          {pf.title === 'السادة' && <div style={{ ...at(390, 456, 456, 490), background: '#f9f9f9', ...text(4.4, { fontWeight: 900 }) }}>السادة /</div>}
           {/* خانة الرقم الضريبي التانية (الشمال) مش مستخدمة — بتتغطى في الطباعة */}
           <div style={{ ...at(55, 405, 335, 424), background: '#fcfcfc' }} />
           <div style={{ ...at(70, 386, 450, 478), ...text(4) }}>{inv.customer_name || 'عميل نقدي'}</div>
@@ -198,35 +202,6 @@ export function ReceiptDoc({ p, settings }: { p: Row; settings: Row }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 40, fontSize: 12 }}>
         <div>المستلم: ....................</div><div>المحاسب: ....................</div>
       </div>
-    </div>
-  )
-}
-
-export function Barcode({ value, height = 40, width = 1.6 }: { value: string; height?: number; width?: number }) {
-  const [svg, setSvg] = useState('')
-  useEffect(() => {
-    try {
-      const el = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-      JsBarcode(el, value, { format: 'CODE128', height, width, displayValue: false, margin: 0 })
-      setSvg(el.outerHTML)
-    } catch { setSvg('') }
-  }, [value, height, width])
-  return <span dangerouslySetInnerHTML={{ __html: svg }} />
-}
-
-// ملصقات باركود (3 في الصف على A4)
-export function LabelsDoc({ items, settings }: { items: { p: Row; count: number }[]; settings: Row }) {
-  const all = items.flatMap(({ p, count }) => Array.from({ length: count }, () => p))
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, direction: 'rtl', fontFamily: '"IBM Plex Sans Arabic", sans-serif' }}>
-      {all.map((p, i) => (
-        <div key={i} style={{ border: '1px dashed #bbb', borderRadius: 6, padding: '6px 8px', textAlign: 'center', breakInside: 'avoid', color: '#111' }}>
-          <div style={{ fontSize: 9, color: brand, fontWeight: 800 }}>{settings.company_name}</div>
-          <div style={{ fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
-          <Barcode value={p.barcode || p.code} height={34} width={1.4} />
-          <div style={{ fontSize: 10, display: 'flex', justifyContent: 'space-between' }} dir="ltr"><span>{p.barcode || p.code}</span><span>{p.model}</span></div>
-        </div>
-      ))}
     </div>
   )
 }

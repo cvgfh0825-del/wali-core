@@ -26,6 +26,9 @@ export default function SalesPOS() {
   const [customer, setCustomer] = useState<{ id?: string; name: string; phone: string }>({ name: '', phone: '' })
   const [fields, setFields] = useState<Fields>(loadFields)
   const [invDate, setInvDate] = useState(today())
+  const [title, setTitle] = useState<'السيد' | 'السادة'>('السيد')
+  // رقم الفاتورة الجاي (للعرض) — الرقم الفعلي بيتحجز وقت الحفظ
+  const nextNo = useLoad(() => (id ? db.get('invoices', id).then((r) => r?.number ?? '') : db.rpc<string>('peek_doc_number', { p_kind: 'proforma' })), [id], ['invoices'])
   const setField = (k: keyof Fields, v: string) => setFields((f) => ({ ...f, [k]: v }))
   const [discount, setDiscount] = useState('')
   const [paid, setPaid] = useState('')
@@ -48,7 +51,7 @@ export default function SalesPOS() {
       const ls = items.map((i: any) => ({ key: ++seq, product: prods.find((p: any) => p.id === i.product_id)!, qty: Number(i.qty) })).filter((l: Line) => l.product)
       setLines([...ls, blank()])
       setCustomer({ id: inv.customer_id ?? undefined, name: inv.customer_name ?? '', phone: inv.customer_phone ?? '' })
-      if (inv.print_fields) setFields({ ...FIELD_DEFAULTS, ...inv.print_fields })
+      if (inv.print_fields) { setFields({ ...FIELD_DEFAULTS, ...inv.print_fields }); setTitle(inv.print_fields.title === 'السادة' ? 'السادة' : 'السيد') }
       if (inv.invoice_date) setInvDate(String(inv.invoice_date).slice(0, 10))
       setDiscount(Number(inv.discount_sdg) ? String(inv.discount_sdg) : '')
       setNotes(inv.notes ?? '')
@@ -71,14 +74,14 @@ export default function SalesPOS() {
   const save = async (kind: 'proforma' | 'final') => {
     const inv = await run(() => db.rpc<Row>('save_invoice', { p: {
       id: id ?? null, kind,
-      customer_id: customer.id ?? null, customer_name: customer.name || null, customer_phone: customer.phone || null,       print_fields: fields, invoice_date: invDate || null,
+      customer_id: customer.id ?? null, customer_name: customer.name || null, customer_phone: customer.phone || null,       print_fields: { ...fields, title }, invoice_date: invDate || null,
       discount_sdg: Number(discount) || 0, paid_sdg: kind === 'final' ? paidVal : 0, method, notes: notes || null,
       items: filled.map((l) => ({ product_id: l.product!.id, qty: l.qty, ...(l.price_sdg != null && canPrice ? { unit_price_sdg: l.price_sdg } : {}) })),
     } }))
     if (inv) {
       try { localStorage.setItem('wali-invoice-fields', JSON.stringify(fields)) } catch { /* */ }
       setDone(inv)
-      setLines([blank()]); setCustomer({ name: '', phone: '' }); setInvDate(today()); setDiscount(''); setPaid(''); setNotes(''); setPayMode('full')
+      setLines([blank()]); setCustomer({ name: '', phone: '' }); setInvDate(today()); setTitle('السيد'); setDiscount(''); setPaid(''); setNotes(''); setPayMode('full')
       if (id) nav('/sales', { replace: true })
     }
   }
@@ -106,11 +109,15 @@ export default function SalesPOS() {
           {!rate && <div className="mb-3 flex items-center gap-2 text-[13px] font-bold text-amber-700 bg-amber-100 rounded-lg px-3 py-2"><AlertTriangle size={15} /> أدخل سعر صرف اليوم أولًا</div>}
           {id && <div className="mb-3 text-[13px] font-bold text-brand-600">تعديل فاتورة مبدئية</div>}
 
-          {/* الرقم الضريبي للشركة */}
-          <div className="flex items-end">
+          {/* الرقم الضريبي للشركة + رقم الفاتورة التلقائي */}
+          <div className="flex items-end justify-between gap-6">
             <div className="text-center">
               <div className="font-black text-[15px] mb-1.5">الرقم التعريفي الضريبي</div>
               <TaxBoxes value={fields.company_tax_id} onChange={(v) => setField('company_tax_id', v)} />
+            </div>
+            <div className="text-left">
+              <div className="font-black text-[15px] mb-1.5">رقم الفاتورة</div>
+              <div className="num font-black text-[20px] border-2 border-zinc-700 rounded-sm px-4 h-9 flex items-center" dir="ltr">{nextNo.data ?? '...'}</div>
             </div>
           </div>
 
@@ -122,7 +129,9 @@ export default function SalesPOS() {
                 value={invDate} onChange={(e) => setInvDate(e.target.value)} />
             </div>
             <div className="flex items-end gap-2 flex-1 max-w-[460px] relative">
-              <span className="font-black text-[16px] shrink-0">السيد /</span>
+              <select className="font-black text-[16px] shrink-0 bg-transparent outline-none cursor-pointer border-b-2 border-transparent focus:border-brand-500 [color-scheme:light]" value={title} onChange={(e) => setTitle(e.target.value as any)} title="السيد أو السادة">
+                <option value="السيد">السيد /</option><option value="السادة">السادة /</option>
+              </select>
               <input className="flex-1 bg-transparent border-b-2 border-dotted border-zinc-400 focus:border-brand-500 outline-none px-1 pb-0.5 font-bold text-[15px] placeholder:text-zinc-400 placeholder:font-normal"
                 placeholder="اسم العميل (اختياري للنقدي)" value={customer.name} onChange={(e) => setCustomer({ name: e.target.value, phone: customer.phone })} />
               <input className="w-32 bg-transparent border-b-2 border-dotted border-zinc-400 focus:border-brand-500 outline-none px-1 pb-0.5 num text-[14px] placeholder:text-zinc-400 disabled:text-zinc-500" dir="ltr"
@@ -147,7 +156,7 @@ export default function SalesPOS() {
               <Head dark title="الكمية" en="Qty" />
               <Head dark title="سعر الوحدة" en="Unit Price" />
               <Head dark title="القيمة المضافة" en="17 % VAT" white />
-              <Head title="الإجمالية" en="Total" />
+              <Head title="الإجمالي" en="Total" />
               <div />
             </div>
             <div className="mt-1.5 space-y-0">
@@ -275,7 +284,7 @@ function TaxBoxes({ value, onChange }: { value: string; onChange?: (v: string) =
   )
 }
 
-// خانة البيان: بحث منسدل في الأصناف بالاسم أو الكود أو الباركود أو الموديل
+// خانة البيان: بحث منسدل في الأصناف بالاسم أو الكود أو الموديل
 function ProductPicker({ db, value, onPick, disabled }: { db: Backend; value?: Row; onPick: (p: Row) => void; disabled?: boolean }) {
   const [term, setTerm] = useState('')
   const [open, setOpen] = useState(false)
@@ -288,7 +297,7 @@ function ProductPicker({ db, value, onPick, disabled }: { db: Backend; value?: R
     const t = setTimeout(() => {
       db.list('v_products', {
         eq: { is_active: true },
-        search: term.trim() ? { cols: ['name', 'code', 'barcode', 'model'], term: term.trim() } : undefined,
+        search: term.trim() ? { cols: ['name', 'code', 'model'], term: term.trim() } : undefined,
         order: [{ col: 'code' }], limit: 30,
       }).then((r) => { setList(r); setHi(0) }).catch(() => setList([]))
     }, 150)
@@ -302,9 +311,9 @@ function ProductPicker({ db, value, onPick, disabled }: { db: Backend; value?: R
     else if (e.key === 'Escape') setOpen(false)
     else if (e.key === 'Enter') {
       e.preventDefault()
-      // قارئ الباركود بيكتب الكود ويضغط Enter
+      // كتابة الكود بالظبط + Enter بتختار الصنف على طول
       const code = term.trim()
-      const exact = code && ((await db.list('v_products', { eq: { code } }))[0] ?? (await db.list('v_products', { eq: { barcode: code } }))[0])
+      const exact = code && (await db.list('v_products', { eq: { code } }))[0]
       if (exact) pick(exact)
       else if (list[hi]) pick(list[hi])
     }
@@ -315,7 +324,7 @@ function ProductPicker({ db, value, onPick, disabled }: { db: Backend; value?: R
       <div className="flex items-center">
         <Search size={14} className="absolute right-2.5 text-zinc-400 pointer-events-none" />
         <input ref={ref} disabled={disabled} className="cell w-full pr-8 font-bold text-right placeholder:font-normal placeholder:text-zinc-400"
-          placeholder={value ? '' : 'ابحث عن الصنف أو امسح الباركود...'}
+          placeholder={value ? '' : 'ابحث عن الصنف بالاسم أو الكود...'}
           value={open ? term : value ? value.name : ''}
           onFocus={() => { setTerm(''); setOpen(true) }} onBlur={() => setTimeout(() => setOpen(false), 150)}
           onChange={(e) => { setTerm(e.target.value); setOpen(true) }} onKeyDown={onKey} />

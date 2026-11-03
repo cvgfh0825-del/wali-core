@@ -8,7 +8,7 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const mig = (f) => readFileSync(path.join(here, '../../supabase/migrations', f), 'utf8')
 const db = new PGlite()
 await db.exec(readFileSync(path.join(here, '../src/demo/bootstrap.sql'), 'utf8'))
-for (const f of ['0001_core.sql', '0002_logic.sql', '0003_security_notify.sql', '0005_returns.sql', '0006_backup.sql', '0007_product_images.sql', '0008_fusha_messages.sql', '0010_check_in_fix.sql', '0011_customer_tax_id.sql', '0012_invoice_fields.sql']) {
+for (const f of ['0001_core.sql', '0002_logic.sql', '0003_security_notify.sql', '0005_returns.sql', '0006_backup.sql', '0007_product_images.sql', '0008_fusha_messages.sql', '0010_check_in_fix.sql', '0011_customer_tax_id.sql', '0012_invoice_fields.sql', '0013_peek_doc_number.sql']) {
   try { await db.exec(mig(f)); console.log('✔', f) }
   catch (e) { console.error('✘', f, e.message, e.position ?? ''); process.exit(1) }
 }

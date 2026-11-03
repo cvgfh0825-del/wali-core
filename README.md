@@ -30,6 +30,7 @@
 10. `supabase/migrations/0010_check_in_fix.sql` (تسجيل الحضور لو الأدمن عمل سجل لليوم قبل الموظف)
 11. `supabase/migrations/0011_customer_tax_id.sql` (الرقم الضريبي للعميل على الفاتورة)
 12. `supabase/migrations/0012_invoice_fields.sql` (كل خانات الفاتورة بتتكتب من الشاشة)
+13. `supabase/migrations/0013_peek_doc_number.sql` (رقم الفاتورة الجاي على الشاشة)
 
 ### 2) أول حساب (هيبقى Admin تلقائياً)
 من **Authentication ← Users ← Add user**:

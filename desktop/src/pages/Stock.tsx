@@ -31,7 +31,7 @@ export default function Stock() {
     order: [{ col: 'created_at', asc: false }], limit: 400,
   }), [term, from, to], ['products'])
   const products = useLoad(() => db.list('v_products', {
-    eq: { is_active: true }, search: term ? { cols: ['name', 'code', 'barcode', 'model'], term } : undefined, order: [{ col: 'code' }],
+    eq: { is_active: true }, search: term ? { cols: ['name', 'code', 'model'], term } : undefined, order: [{ col: 'code' }],
   }), [term], ['products'])
 
   if (!can('stock')) return <NoAccess />

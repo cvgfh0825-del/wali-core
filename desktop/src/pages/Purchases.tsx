@@ -51,7 +51,7 @@ function NewPurchase({ onClose }: { onClose: () => void }) {
   const { busy, run } = useAction()
   const suppliers = useLoad(() => db.list('suppliers', { order: [{ col: 'name' }] }), [])
   const [term, setTerm] = useState('')
-  const found = useLoad(() => term.trim() ? db.list('v_products', { search: { cols: ['name', 'code', 'barcode', 'model'], term }, limit: 8 }) : Promise.resolve([]), [term])
+  const found = useLoad(() => term.trim() ? db.list('v_products', { search: { cols: ['name', 'code', 'model'], term }, limit: 8 }) : Promise.resolve([]), [term])
   const [f, setF] = useState<Row>({ supplier_id: '', rate: rate ? String(rate) : '', shipping_sdg: '', customs_sdg: '', other_sdg: '', paid_sdg: '', notes: '' })
   const [items, setItems] = useState<{ p: Row; qty: string; price: string }[]>([])
   const set = (k: string, v: any) => setF((x) => ({ ...x, [k]: v }))

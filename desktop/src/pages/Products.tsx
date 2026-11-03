@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Package, Plus, Pencil, Tags, Barcode as BarcodeIcon, ImagePlus, Download, LayoutGrid, List, Printer, Trash2, RefreshCcw } from 'lucide-react'
+import { Package, Plus, Pencil, Tags, ImagePlus, Download, LayoutGrid, List, Trash2 } from 'lucide-react'
 import { useApp, useLoad, useAction } from '../lib/app'
 import { PageHeader, SearchBox, Money, Badge, Empty, Loading, Modal, Field, Tabs, NoAccess } from '../components/ui'
 import { ProductImage } from '../components/ProductImage'
 import { productImage, rememberImage } from '../lib/images'
-import { printDoc, LabelsDoc, Barcode } from '../components/Print'
 import { usd, qty, num, downloadCSV } from '../lib/format'
 import type { Row } from '../lib/backend'
 
@@ -18,12 +17,11 @@ export default function Products() {
   const [view, setView] = useState<'grid' | 'list'>('list')
   const [edit, setEdit] = useState<Row | null>(null)
   const [cats, setCatsOpen] = useState(false)
-  const [labels, setLabels] = useState(false)
 
   const categories = useLoad(() => db.list('categories', { order: [{ col: 'sort' }] }), [], ['categories'])
   const { data, loading } = useLoad(() => db.list('v_products', {
     eq: cat ? { category_id: cat } : {},
-    search: term ? { cols: ['name', 'code', 'barcode', 'model'], term } : undefined,
+    search: term ? { cols: ['name', 'code', 'model'], term } : undefined,
     order: [{ col: 'code' }],
   }), [term, cat], ['products'])
   const rows = useMemo(() => (data ?? []).filter((p: any) => !low || Number(p.qty_on_hand) <= Number(p.min_qty)), [data, low])
@@ -36,16 +34,15 @@ export default function Products() {
       <PageHeader title="الأصناف" subtitle={`${rows.length} صنف · قيمة المخزون ${usd(value)} ≈ ${num(value * (rate ?? 0))} ج.س`} icon={<Package size={22} />}
         actions={<>
           <button className="btn-ghost" onClick={() => downloadCSV('الأصناف', rows, [
-            { key: 'code', label: 'الكود' }, { key: 'barcode', label: 'الباركود' }, { key: 'name', label: 'الاسم' }, { key: 'model', label: 'الموديل' },
+            { key: 'code', label: 'الكود' }, { key: 'name', label: 'الاسم' }, { key: 'model', label: 'الموديل' },
             { key: 'category_name', label: 'القسم' }, { key: 'cost_usd', label: 'التكلفة $' }, { key: 'price_usd', label: 'السعر $' },
             { key: 'price_sdg', label: 'السعر ج.س' }, { key: 'qty_on_hand', label: 'المتبقي' }, { key: 'sold_qty', label: 'المباع' }])}><Download size={17} /> CSV</button>
-          {can('products', 'print') && <button className="btn-ghost" onClick={() => setLabels(true)}><BarcodeIcon size={17} /> طباعة باركود</button>}
           {can('products', 'create') && <button className="btn-ghost" onClick={() => setCatsOpen(true)}><Tags size={17} /> الأقسام</button>}
           {can('products', 'create') && <button className="btn-primary" onClick={() => setEdit({})}><Plus size={18} /> صنف جديد</button>}
         </>} />
 
       <div className="flex items-center gap-3 mb-4">
-        <SearchBox value={term} onChange={setTerm} placeholder="الاسم أو الكود أو الباركود أو الموديل" className="w-96" autoFocus />
+        <SearchBox value={term} onChange={setTerm} placeholder="الاسم أو الكود أو الموديل" className="w-96" autoFocus />
         <select className="input w-60 h-11" value={cat} onChange={(e) => setCat(e.target.value)}>
           <option value="">كل الأقسام</option>
           {(categories.data ?? []).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -83,7 +80,7 @@ export default function Products() {
                 {rows.map((p: any) => (
                   <tr key={p.id}>
                     <td className="py-2"><ProductImage p={p} className="w-10 h-10 rounded-lg object-cover" /></td>
-                    <td className="num"><div>{p.code}</div><div className="text-[10px] text-zinc-500">{p.barcode}</div></td>
+                    <td className="num">{p.code}</td>
                     <td><div className="font-semibold">{p.name}</div><div className="text-[12px] text-zinc-500" dir="ltr">{p.model}</div></td>
                     <td className="text-zinc-400 text-[13px]">{p.category_name}</td>
                     <td className="num text-zinc-400">{usd(p.cost_usd)}</td>
@@ -105,7 +102,6 @@ export default function Products() {
 
       {edit && <ProductForm p={edit} cats={categories.data ?? []} onClose={() => setEdit(null)} />}
       <CategoriesModal open={cats} onClose={() => setCatsOpen(false)} />
-      <LabelsModal open={labels} onClose={() => setLabels(false)} products={rows} />
     </>
   )
 }
@@ -131,7 +127,7 @@ function ProductForm({ p, cats, onClose }: { p: Row; cats: Row[]; onClose: () =>
   const { busy, run } = useAction()
   const isNew = !p.id
   const [f, setF] = useState<Row>({
-    code: '', barcode: '', name: '', model: '', category_id: '', unit: 'قطعة', cost_usd: '', margin_pct: '30', price_usd: '',
+    code: '', name: '', model: '', category_id: '', unit: 'قطعة', cost_usd: '', margin_pct: '30', price_usd: '',
     auto_price: true, min_qty: '2', notes: '', is_active: true, opening: '', ...p, image: null,
   })
   const set = (k: string, v: any) => setF((x) => ({ ...x, [k]: v }))
@@ -143,14 +139,14 @@ function ProductForm({ p, cats, onClose }: { p: Row; cats: Row[]; onClose: () =>
   useEffect(() => {
     if (isNew && !f.code) db.list('products', { order: [{ col: 'code', asc: false }], limit: 1 }).then((r) => {
       const last = Number(r[0]?.code)
-      if (!isNaN(last)) setF((x) => ({ ...x, code: String(last + 1), barcode: '622' + String(last + 1).padStart(9, '0') }))
+      if (!isNaN(last)) setF((x) => ({ ...x, code: String(last + 1) }))
     })
   }, [db, isNew, f.code])
   const price = f.auto_price ? Math.round(Number(f.cost_usd || 0) * (1 + Number(f.margin_pct || 0) / 100) * 100) / 100 : Number(f.price_usd || 0)
 
   const save = async () => {
     const row: Row = {
-      code: String(f.code).trim(), barcode: String(f.barcode ?? '').trim() || null, name: f.name.trim(), model: f.model || null,
+      code: String(f.code).trim(), name: f.name.trim(), model: f.model || null,
       category_id: f.category_id || null, unit: f.unit || 'قطعة', cost_usd: Number(f.cost_usd || 0), margin_pct: Number(f.margin_pct || 0),
       price_usd: price, auto_price: !!f.auto_price, min_qty: Number(f.min_qty || 0), notes: f.notes || null, is_active: !!f.is_active,
     }
@@ -180,15 +176,10 @@ function ProductForm({ p, cats, onClose }: { p: Row; cats: Row[]; onClose: () =>
             <input type="file" accept="image/*" className="hidden" onChange={async (e) => { const file = e.target.files?.[0]; if (file) set('image', await resizeImage(file)) }} />
           </label>
           {f.image && <button className="text-[12px] text-red-300 mt-2 flex items-center gap-1" onClick={() => set('image', null)}><Trash2 size={13} /> إزالة الصورة</button>}
-          {(f.barcode || f.code) && <div className="mt-4 bg-white rounded-xl p-3 text-center"><Barcode value={f.barcode || f.code} height={40} /><div className="text-black text-[11px] num">{f.barcode || f.code}</div></div>}
         </div>
         <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <Field label="الكود *"><input className="input num" value={f.code} onChange={(e) => set('code', e.target.value)} /></Field>
-            <Field label="الباركود">
-              <div className="flex gap-1"><input className="input num" dir="ltr" value={f.barcode ?? ''} onChange={(e) => set('barcode', e.target.value)} />
-                <button className="btn-ghost w-11 px-0 shrink-0" title="باركود تلقائي" onClick={() => set('barcode', '622' + String(f.code || Date.now()).padStart(9, '0').slice(-9))}><RefreshCcw size={15} /></button></div>
-            </Field>
             <Field label="الموديل"><input className="input" dir="ltr" value={f.model ?? ''} onChange={(e) => set('model', e.target.value)} /></Field>
           </div>
           <Field label="اسم الصنف *"><input className="input" value={f.name} onChange={(e) => set('name', e.target.value)} /></Field>
@@ -237,30 +228,6 @@ function CategoriesModal({ open, onClose }: { open: boolean; onClose: () => void
           <div key={c.id} className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-ink-800">
             <span>{c.name}</span>
             {can('settings', 'edit') && <button className="p-1.5 text-zinc-500 hover:text-red-300" onClick={async () => { await run(() => db.remove('categories', c.id), 'تم الحذف'); reload() }}><Trash2 size={15} /></button>}
-          </div>
-        ))}
-      </div>
-    </Modal>
-  )
-}
-
-function LabelsModal({ open, onClose, products }: { open: boolean; onClose: () => void; products: Row[] }) {
-  const { settings } = useApp()
-  const [counts, setCounts] = useState<Record<string, number>>({})
-  const [term, setTerm] = useState('')
-  const list = products.filter((p) => !term || p.name.includes(term) || String(p.code).includes(term))
-  const chosen = products.filter((p) => counts[p.id] > 0).map((p) => ({ p, count: counts[p.id] }))
-  return (
-    <Modal open={open} onClose={onClose} title="طباعة ملصقات باركود" subtitle="اختر الأصناف وعدد الملصقات لكل صنف (3 في الصف على ورق A4)" width="max-w-2xl"
-      footer={<><span className="ml-auto text-sm text-zinc-400 num">{chosen.reduce((s, c) => s + c.count, 0)} ملصق</span>
-        <button className="btn-primary" disabled={!chosen.length} onClick={() => printDoc(<LabelsDoc items={chosen} settings={settings} />)}><Printer size={17} /> طباعة</button></>}>
-      <SearchBox value={term} onChange={setTerm} className="mb-3" />
-      <div className="max-h-96 overflow-auto space-y-1">
-        {list.map((p) => (
-          <div key={p.id} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-ink-800">
-            <span className="num text-zinc-500 w-14">{p.code}</span><span className="flex-1 truncate">{p.name}</span>
-            <button className="text-[12px] text-brand-400" onClick={() => setCounts((c) => ({ ...c, [p.id]: Math.max(1, Number(p.qty_on_hand)) }))}>بعدد المخزون</button>
-            <input className="input h-9 w-20 num text-center" value={counts[p.id] ?? ''} placeholder="0" onChange={(e) => setCounts((c) => ({ ...c, [p.id]: Number(e.target.value.replace(/\D/g, '')) || 0 }))} />
           </div>
         ))}
       </div>
