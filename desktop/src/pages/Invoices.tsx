@@ -6,6 +6,7 @@ import { PageHeader, SearchBox, Tabs, Money, Badge, Empty, Loading, Modal, Field
 import { printDoc, InvoiceDoc } from '../components/Print'
 import { STATUS, PAY, date, dateTime, sdg, num, qty, usd, daysAgo, today, downloadCSV, METHOD } from '../lib/format'
 import type { Row } from '../lib/backend'
+import { AdminDelete } from '../components/AdminDelete'
 
 type TabKey = 'all' | 'final' | 'proforma' | 'cancelled'
 
@@ -133,6 +134,7 @@ export function InvoiceDrawer({ id, onClose, onOpen }: { id: string; onClose: ()
         {can('sales', 'print') && <button className="btn-ghost" onClick={() => print()}><Printer size={17} /> طباعة</button>}
         {can('sales', 'print') && (window as any).wali && <button className="btn-ghost" onClick={() => print(true)}><FileDown size={17} /> PDF</button>}
         <div className="flex-1" />
+        <AdminDelete table="invoices" id={inv.id} label={`الفاتورة ${inv.number}`} onDone={onClose} />
         {inv.status !== 'cancelled' && inv.status !== 'converted' && !returned && can('sales', 'cancel') && <button className="btn-danger" onClick={cancel}><Ban size={17} /> إلغاء</button>}
         {canReturn && <button className="btn-ghost" onClick={() => setGiveBack(true)}><Undo2 size={17} /> مرتجع</button>}
         {inv.kind === 'proforma' && inv.status === 'open' && can('sales', 'edit') && <button className="btn-ghost" onClick={() => nav(`/sales/${inv.id}`)}><Pencil size={17} /> تعديل</button>}

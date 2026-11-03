@@ -4,6 +4,7 @@ import { useApp, useLoad, useAction } from '../lib/app'
 import { PageHeader, Money, Empty, Loading, Modal, Field, Badge, NoAccess } from '../components/ui'
 import { date, num } from '../lib/format'
 import type { Row } from '../lib/backend'
+import { AdminDelete } from '../components/AdminDelete'
 
 export default function Employees() {
   const { db, can } = useApp()
@@ -26,13 +27,14 @@ export default function Employees() {
                   <div className="text-[13px] text-zinc-400">{e.job_title}</div>
                 </div>
                 {can('hr', 'edit') && <button className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-ink-700" onClick={() => setEdit(e)}><Pencil size={16} /></button>}
+                <AdminDelete icon table="employees" id={e.id} label={`الموظف ${e.full_name} (مع حضوره ومرتباته)`} />
               </div>
               <div className="grid grid-cols-2 gap-2 mt-4 text-sm">
                 <div className="rounded-xl bg-ink-900 p-3"><div className="text-[11px] text-zinc-500">المرتب</div><Money v={e.base_salary} className="font-bold" /></div>
                 <div className="rounded-xl bg-ink-900 p-3"><div className="text-[11px] text-zinc-500">نسبة المبيعات</div><span className="num font-bold">{num(e.commission_pct, 2)}%</span> <span className="text-[11px] text-zinc-500">{e.commission_basis === 'own' ? 'من مبيعاته' : 'من كل المبيعات'}</span></div>
               </div>
               <div className="flex items-center justify-between mt-3 text-[12px] text-zinc-500">
-                <span>من {date(e.hired_at)}</span>
+                <span>بدأ العمل {date(e.hired_at)}</span>
                 {e.username ? <Badge cls="bg-sky-500/10 text-sky-300"><Link2 size={11} /> {e.username}</Badge> : <span>بدون حساب</span>}
               </div>
             </div>
@@ -66,8 +68,8 @@ function EmployeeForm({ e, onClose }: { e: Row; onClose: () => void }) {
         <Field label="الاسم *"><input className="input" autoFocus value={f.full_name} onChange={(x) => set('full_name', x.target.value)} /></Field>
         <Field label="الوظيفة"><input className="input" value={f.job_title ?? ''} onChange={(x) => set('job_title', x.target.value)} /></Field>
         <Field label="الهاتف"><input className="input num" dir="ltr" value={f.phone ?? ''} onChange={(x) => set('phone', x.target.value)} /></Field>
-        <Field label="تاريخ التعيين"><input type="date" className="input" value={f.hired_at ?? ''} onChange={(x) => set('hired_at', x.target.value)} /></Field>
-        <Field label="المرتب الأساسي (ج.س)"><input className="input num" value={f.base_salary} onChange={(x) => set('base_salary', x.target.value.replace(/[^\d.]/g, ''))} /></Field>
+        <Field label="بداية العمل" hint="يبدأ منه حساب الحضور والمرتب"><input type="date" className="input" value={f.hired_at ?? ''} onChange={(x) => set('hired_at', x.target.value)} /></Field>
+        <Field label="المرتب الشهري (ج.س)" hint="يُحسب بالساعة حسب ساعات العمل الفعلية"><input className="input num" value={f.base_salary} onChange={(x) => set('base_salary', x.target.value.replace(/[^\d.]/g, ''))} /></Field>
         <Field label="نسبة من المبيعات %"><input className="input num" value={f.commission_pct} onChange={(x) => set('commission_pct', x.target.value.replace(/[^\d.]/g, ''))} /></Field>
         <Field label="النسبة محسوبة من"><select className="input" value={f.commission_basis} onChange={(x) => set('commission_basis', x.target.value)}>
           <option value="own">مبيعاته الخاصة فقط</option><option value="total">إجمالي مبيعات الشركة</option></select></Field>

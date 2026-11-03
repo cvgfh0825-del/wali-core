@@ -7,6 +7,7 @@ import { ProductImage } from '../components/ProductImage'
 import { productImage, rememberImage } from '../lib/images'
 import { usd, qty, num, downloadCSV } from '../lib/format'
 import type { Row } from '../lib/backend'
+import { AdminDelete } from '../components/AdminDelete'
 
 export default function Products() {
   const { db, can, rate } = useApp()
@@ -168,7 +169,7 @@ function ProductForm({ p, cats, onClose }: { p: Row; cats: Row[]; onClose: () =>
 
   return (
     <Modal open onClose={onClose} width="max-w-3xl" title={isNew ? 'صنف جديد' : `تعديل: ${p.name}`}
-      footer={<><button className="btn-ghost" onClick={onClose}>إلغاء</button><button className="btn-primary" disabled={busy || !f.name || !f.code} onClick={save}>حفظ</button></>}>
+      footer={<>{!isNew && <AdminDelete table="products" id={p.id} label={`الصنف ${p.name}`} onDone={onClose} />}<div className="flex-1" /><button className="btn-ghost" onClick={onClose}>إلغاء</button><button className="btn-primary" disabled={busy || !f.name || !f.code} onClick={save}>حفظ</button></>}>
       <div className="grid grid-cols-[200px_1fr] gap-6">
         <div>
           <label className="block aspect-square rounded-2xl border-2 border-dashed border-ink-600 hover:border-brand-500/60 bg-ink-900 overflow-hidden cursor-pointer relative group">

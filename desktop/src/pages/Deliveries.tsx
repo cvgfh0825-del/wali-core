@@ -5,6 +5,7 @@ import { PageHeader, Tabs, Badge, Empty, Loading, useConfirm, NoAccess } from '.
 import { printDoc, DeliveryDoc } from '../components/Print'
 import { STATUS, dateTime, qty } from '../lib/format'
 import type { Row } from '../lib/backend'
+import { AdminDelete } from '../components/AdminDelete'
 
 export default function Deliveries() {
   const { db, can, settings } = useApp()
@@ -35,6 +36,7 @@ export default function Deliveries() {
           <PermitCard key={p.id} p={p} itemsOf={itemsOf}
             actions={<>
               {can('delivery', 'print') && <button className="btn-ghost btn-sm" onClick={() => print(p)}><Printer size={15} /> طباعة</button>}
+              <AdminDelete icon table="delivery_permits" id={p.id} label={`إذن التسليم ${p.number}`} />
               {p.status === 'pending' && can('delivery', 'cancel') && <button className="btn-danger btn-sm" disabled={busy} onClick={async () => { if (await confirm.ask('إلغاء الإذن؟', { danger: true })) await run(() => db.rpc('cancel_delivery', { p_permit: p.id }), 'أُلغي الإذن') }}><Ban size={15} /></button>}
               {p.status === 'pending' && can('delivery', 'approve') && <button className="btn-primary btn-sm mr-auto" disabled={busy} onClick={() => confirmDelivery(p)}><CheckCircle2 size={15} /> تأكيد التسليم</button>}
             </>} />

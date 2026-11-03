@@ -6,6 +6,7 @@ import { PartyForm } from './Suppliers'
 import { InvoiceDrawer } from './Invoices'
 import { STATUS, date } from '../lib/format'
 import type { Row } from '../lib/backend'
+import { AdminDelete } from '../components/AdminDelete'
 
 export default function Customers() {
   const { db, can } = useApp()
@@ -34,6 +35,7 @@ export default function Customers() {
                 <td className="flex gap-1">
                   {can('sales') && <button className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-ink-700" title="كشف حساب" onClick={() => setStmt(c)}><FileText size={16} /></button>}
                   {can('customers', 'edit') && <button className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-ink-700" onClick={() => setEdit(c)}><Pencil size={16} /></button>}
+                  <AdminDelete icon table="customers" id={c.id} label={`العميل ${c.name}`} />
                 </td>
               </tr>
             ))}</tbody>

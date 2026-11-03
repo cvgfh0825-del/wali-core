@@ -5,6 +5,7 @@ import { PageHeader, Tabs, Money, Badge, Empty, Loading, Modal, Field, Segmented
 import { printDoc, ReceiptDoc } from '../components/Print'
 import { date, daysAgo, today, METHOD, short, downloadCSV } from '../lib/format'
 import type { Row } from '../lib/backend'
+import { AdminDelete } from '../components/AdminDelete'
 
 export default function Accounting() {
   const { db, can, settings } = useApp()
@@ -57,7 +58,7 @@ export default function Accounting() {
                       <td className="text-zinc-400">{METHOD[p.method]}</td>
                       <td><Money v={p.amount_sdg} className={`font-bold ${p.direction === 'in' ? 'text-emerald-300' : 'text-red-300'}`} /></td>
                       <td className="text-zinc-500 text-[13px] max-w-[220px] truncate">{p.notes}</td>
-                      <td><button className="p-2 text-zinc-500 hover:text-white" title="طباعة إيصال" onClick={() => printDoc(<ReceiptDoc p={p} settings={settings} />)}><Printer size={15} /></button></td>
+                      <td className="whitespace-nowrap"><button className="p-2 text-zinc-500 hover:text-white" title="طباعة إيصال" onClick={() => printDoc(<ReceiptDoc p={p} settings={settings} />)}><Printer size={15} /></button><AdminDelete icon table="payments" id={p.id} label="هذه الحركة" /></td>
                     </tr>
                   ))}</tbody>
                 </table>

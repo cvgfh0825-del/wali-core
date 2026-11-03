@@ -8,7 +8,7 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const mig = (f) => readFileSync(path.join(here, '../../supabase/migrations', f), 'utf8')
 const db = new PGlite()
 await db.exec(readFileSync(path.join(here, '../src/demo/bootstrap.sql'), 'utf8'))
-for (const f of ['0001_core.sql', '0002_logic.sql', '0003_security_notify.sql', '0005_returns.sql', '0006_backup.sql', '0007_product_images.sql', '0008_fusha_messages.sql', '0010_check_in_fix.sql', '0011_customer_tax_id.sql', '0012_invoice_fields.sql', '0013_peek_doc_number.sql']) {
+for (const f of ['0001_core.sql', '0002_logic.sql', '0003_security_notify.sql', '0005_returns.sql', '0006_backup.sql', '0007_product_images.sql', '0008_fusha_messages.sql', '0010_check_in_fix.sql', '0011_customer_tax_id.sql', '0012_invoice_fields.sql', '0013_peek_doc_number.sql', '0014_hours_payroll.sql', '0015_admin_delete.sql']) {
   try { await db.exec(mig(f)); console.log('✔', f) }
   catch (e) { console.error('✘', f, e.message, e.position ?? ''); process.exit(1) }
 }
@@ -152,7 +152,7 @@ await one(`select generate_payroll($1)`, [period])
 const pay = await one(`select * from payrolls where employee_id=$1`, [emp])
 const expectedComm = Math.round(Number(fin.total_sdg) * 0.02 * 100) / 100
 ok(Math.abs(Number(pay.commission) - expectedComm) < 0.02, 'عمولة سارة 2% من مبيعاتها = ' + pay.commission)
-ok(Math.abs(Number(pay.net) - (300000 + Number(pay.commission) - 10000 - 50000 - Number(pay.late_deduction))) < 0.02, 'صافي المرتب = ' + pay.net)
+ok(Math.abs(Number(pay.net) - (Number(pay.earned) + Number(pay.commission) - 10000 - 50000 - Number(pay.late_deduction))) < 0.02, 'صافي المرتب = المستحق بالساعات + العمولة − الخصم − السلفة = ' + pay.net)
 await one(`select pay_payroll($1)`, [pay.id])
 ok(Number((await one(`select count(*) c from expenses where ref_type='payroll'`)).c) === 1, 'المرتب اتسجل مصروف')
 await expectErr(() => one(`select pay_payroll($1)`, [pay.id]), 'المرتب ميتصرفش مرتين')
@@ -230,6 +230,47 @@ legacy.tables.products.forEach((r) => { r.image = r.id === p2 ? img : null; dele
 await one(`select restore_backup($1)`, [JSON.stringify(legacy)])
 const lp = await one(`select image_v, (select image from product_images where product_id = p.id) image from products p where id=$1`, [p2])
 ok(lp.image_v === 1 && lp.image === img, 'صور النسخ القديمة اتنقلت لجدول الصور')
+
+// المرتب بالساعات: فبراير 2026 — 28 يوم − 4 جمعة − عطلة رسمية = 23 يوم × 8 ساعات = 184 ساعة
+await as(admin)
+await one(`update settings set work_start = '09:00', work_end = '17:00', weekly_off = '{5}', late_deduction_per_min = 0 where id = 1 returning id`)
+await one(`insert into holidays(holiday_date, name) values ('2026-02-10', 'عطلة رسمية') returning id`)
+const hw = (await one(`insert into employees(full_name, base_salary, hired_at) values ('موظف بالساعة', 184000, '2026-02-01') returning id`)).id
+await one(`insert into attendance(employee_id, work_date, check_in, check_out) values ($1, '2026-02-02', '2026-02-02 09:00+02', '2026-02-02 17:00+02'), ($1, '2026-02-03', '2026-02-03 09:00+02', '2026-02-03 13:00+02') returning id`, [hw])
+await one(`insert into attendance(employee_id, work_date, status) values ($1, '2026-02-04', 'leave') returning id`, [hw])
+await one(`insert into salary_additions(employee_id, amount_sdg, addition_date, reason) values ($1, 5000, '2026-02-15', 'مكافأة') returning id`, [hw])
+await one(`insert into salary_deductions(employee_id, amount_sdg, deduction_date) values ($1, 1000, '2026-02-15') returning id`, [hw])
+await one(`insert into salary_advances(employee_id, amount_sdg, advance_date) values ($1, 2000, '2026-02-15') returning id`, [hw])
+const hc = (await one(`select payroll_calc('2026-02', $1) c`, [hw])).c
+ok(hc.month_workdays === 23 && Number(hc.scheduled_hours) === 184, 'أيام العمل من غير الجمعة والعطلة = 23 يوم / 184 ساعة')
+ok(Number(hc.hourly_rate) === 1000, 'سعر الساعة = 184000 ÷ 184 = ' + hc.hourly_rate)
+ok(Number(hc.worked_hours) === 12 && hc.leave_days === 1, 'ساعات العمل 12 + يوم إجازة')
+ok(Number(hc.earned) === 20000, 'المستحق = (12 + 8 إجازة) × 1000 = ' + hc.earned)
+ok(hc.absent_days === 20, 'أيام الغياب = 23 − حضور 2 − إجازة 1 = ' + hc.absent_days)
+ok(Number(hc.net) === 22000, 'الصافي = 20000 + زيادة 5000 − خصم 1000 − سلفة 2000 = ' + hc.net)
+const lateEmp = (await one(`insert into employees(full_name, base_salary, hired_at) values ('بدأ متأخر', 184000, '2026-02-20') returning id`)).id
+ok((await one(`select payroll_calc('2026-02', $1) c`, [lateEmp])).c.due_days === 7, 'الحساب بيبدأ من يوم بداية العمل (20 فبراير → 7 أيام عمل)')
+ok((await one(`select generate_payroll('2026-02') n`)).n >= 2, 'احتساب مرتبات فبراير')
+const pp = await one(`select * from payrolls where employee_id=$1 and period='2026-02'`, [hw])
+ok(Number(pp.net) === 22000 && Number(pp.additions) === 5000, 'المرتب اتسجل بالساعات والزيادة')
+await one(`select pay_payroll($1)`, [pp.id])
+ok((await one(`select payroll_id from salary_additions where employee_id=$1`, [hw])).payroll_id === pp.id, 'الزيادة اتقفلت مع صرف المرتب')
+ok(Number((await one(`select amount_sdg from expenses where ref_id=$1`, [pp.id])).amount_sdg) === 24000, 'مصروف الرواتب = 20000 + 5000 − 1000 = 24000')
+ok(Array.isArray((await one(`select attendance_sheet('2026-02') s`)).s), 'كشف الحضور والمرتبات للشهر')
+
+// الحذف النهائي للأدمن
+const dsp = await one(`select id, qty_on_hand from products where qty_on_hand >= 1 order by code limit 1`)
+const dinv = await one(`select * from save_invoice($1)`, [{ kind: 'final', customer_name: 'حذف تجربة', items: [{ product_id: dsp.id, qty: 1 }] }])
+ok(Number((await one(`select qty_on_hand from products where id=$1`, [dsp.id])).qty_on_hand) === Number(dsp.qty_on_hand) - 1, 'الفاتورة خصمت من المخزن')
+await one(`select create_delivery_permit($1, null, 'مستلم') p`, [dinv.id]).catch(() => null)
+await as(seller)
+await expectErr(() => one(`select admin_delete('invoices', $1)`, [dinv.id]), 'غير الأدمن ميقدرش يحذف نهائي')
+await as(admin)
+await one(`select admin_delete('invoices', $1)`, [dinv.id])
+ok(!(await one(`select id from invoices where id=$1`, [dinv.id])), 'الفاتورة اتحذفت')
+ok(Number((await one(`select count(*) c from payments where invoice_id=$1`, [dinv.id])).c) === 0 && Number((await one(`select count(*) c from delivery_permits where invoice_id=$1`, [dinv.id])).c) === 0, 'دفعاتها وأذونها اتحذفوا')
+ok(Number((await one(`select qty_on_hand from products where id=$1`, [dsp.id])).qty_on_hand) === Number(dsp.qty_on_hand), 'المخزن رجع زي ما كان')
+await expectErr(() => one(`select admin_delete('profiles', $1)`, [admin]), 'جداول مش مسموح حذفها')
 
 const notes = await one(`select count(*) c from notifications`)
 const audit = await one(`select count(*) c from audit_log`)

@@ -4,6 +4,7 @@ import { useApp, useLoad, useAction } from '../lib/app'
 import { PageHeader, Money, Empty, Loading, Modal, Field, Badge, Tabs, Stat, useConfirm, NoAccess } from '../components/ui'
 import { printDoc, TableDoc } from '../components/Print'
 import { STATUS, monthNow, monthName, short, date, sdg, num } from '../lib/format'
+import { AdminDelete } from '../components/AdminDelete'
 
 export default function Payroll() {
   const { db, can, settings } = useApp()
@@ -29,7 +30,8 @@ export default function Payroll() {
     }
   }
   const printSheet = () => printDoc(<TableDoc title={`كشف مرتبات ${monthName(period)}`} settings={settings} rows={rows} cols={[
-    { key: 'employee_name', label: 'الموظف' }, { key: 'base_salary', label: 'الأساسي', fmt: sdg }, { key: 'commission', label: 'نسبة المبيعات', fmt: sdg },
+    { key: 'employee_name', label: 'الموظف' }, { key: 'worked_hours', label: 'الساعات', fmt: (v) => num(v, 1) }, { key: 'earned', label: 'المستحق', fmt: sdg },
+    { key: 'commission', label: 'نسبة المبيعات', fmt: sdg }, { key: 'additions', label: 'زيادات', fmt: sdg },
     { key: 'deductions', label: 'خصومات', fmt: sdg }, { key: 'advances', label: 'سلفيات', fmt: sdg }, { key: 'late_deduction', label: 'تأخير', fmt: sdg },
     { key: 'net', label: 'الصافي', fmt: sdg }, { key: 'sign', label: 'التوقيع', fmt: () => '' }]} />)
 
@@ -57,21 +59,24 @@ export default function Payroll() {
             <Stat label="تم الصرف" value={`${rows.filter((r: any) => r.status === 'paid').length} / ${rows.length}`} />
           </div>}
           <div className="card overflow-hidden">
-            {pr.loading ? <Loading /> : !rows.length ? <Empty title="لم تُحتسب مرتبات هذا الشهر بعد" text="اضغط «احتساب المرتبات» لتُجمع المبيعات والسلفيات والخصومات والتأخير تلقائيًا" /> : (
+            {pr.loading ? <Loading /> : !rows.length ? <Empty title="لم تُحتسب مرتبات هذا الشهر بعد" text="اضغط «احتساب المرتبات» ليُحسب المستحق بالساعات وتُجمع المبيعات والزيادات والخصومات والسلفيات تلقائيًا" /> : (
               <table className="tbl">
-                <thead><tr><th>الموظف</th><th>الأساسي</th><th>مبيعاته</th><th>النسبة</th><th>خصومات</th><th>سلفيات</th><th>تأخير</th><th>الصافي</th><th>الحالة</th><th></th></tr></thead>
+                <thead><tr><th>الموظف</th><th>المرتب</th><th>الساعات</th><th>المستحق</th><th>مبيعاته</th><th>النسبة</th><th>زيادات</th><th>خصومات</th><th>سلفيات</th><th>تأخير</th><th>الصافي</th><th>الحالة</th><th></th></tr></thead>
                 <tbody>{rows.map((r: any) => (
                   <tr key={r.id}>
                     <td className="font-semibold">{r.employee_name}<div className="text-[11px] text-zinc-500">{r.job_title}</div></td>
-                    <td><Money v={r.base_salary} cur={false} /></td>
+                    <td className="text-zinc-400"><Money v={r.base_salary} cur={false} /></td>
+                    <td className="num">{num(r.worked_hours, 1)} <span className="text-zinc-500 text-[11px]">/ {num(r.scheduled_hours, 0)}</span></td>
+                    <td className="font-bold"><Money v={r.earned} cur={false} /></td>
                     <td className="text-zinc-400"><Money v={r.sales_base} cur={false} /></td>
                     <td className="text-emerald-300"><Money v={r.commission} cur={false} /></td>
+                    <td className="text-emerald-300"><Money v={r.additions} cur={false} /></td>
                     <td className="text-red-300"><Money v={r.deductions} cur={false} /></td>
                     <td className="text-red-300"><Money v={r.advances} cur={false} /></td>
                     <td className="text-amber-300"><Money v={r.late_deduction} cur={false} /> <span className="text-[10px] text-zinc-500 num">({r.late_minutes}د)</span></td>
                     <td><Money v={r.net} className="font-black text-brand-300" /></td>
                     <td><Badge cls={STATUS[r.status].cls}>{STATUS[r.status].label}</Badge></td>
-                    <td>{r.status === 'draft' && can('payroll', 'approve') && <button className="btn-primary btn-sm" disabled={busy} onClick={() => pay(r)}><CheckCircle2 size={14} /> صرف</button>}</td>
+                    <td className="whitespace-nowrap">{r.status === 'draft' && can('payroll', 'approve') && <button className="btn-primary btn-sm" disabled={busy} onClick={() => pay(r)}><CheckCircle2 size={14} /> صرف</button>}<AdminDelete icon table="payrolls" id={r.id} label={`مرتب ${r.employee_name}`} onDone={pr.reload} /></td>
                   </tr>
                 ))}</tbody>
               </table>

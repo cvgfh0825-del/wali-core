@@ -5,6 +5,7 @@ import { useApp, useLoad, useAction } from '../lib/app'
 import { PageHeader, SearchBox, Money, Empty, Loading, Modal, Field, Badge, NoAccess, useConfirm } from '../components/ui'
 import { date, usd, num, qty, sdg, dateTime } from '../lib/format'
 import type { Row } from '../lib/backend'
+import { AdminDelete } from '../components/AdminDelete'
 
 export default function Purchases() {
   const { db, can } = useApp()
@@ -165,7 +166,10 @@ function PurchaseView({ p, onClose }: { p: Row; onClose: () => void }) {
     <Modal open onClose={onClose} width="max-w-4xl"
       title={<span className="flex items-center gap-3"><span className="num" dir="ltr">{p.number}</span>{cur.status === 'cancelled' && <Badge cls="bg-red-500/15 text-red-300">ملغية</Badge>}</span>}
       subtitle={`${p.supplier_name ?? ''} · ${dateTime(p.created_at)} · بواسطة ${p.created_by_name ?? ''}`}
-      footer={cur.status === 'posted' && can('purchases', 'cancel') ? <button className="btn-danger" disabled={busy} onClick={cancel}><Ban size={17} /> إلغاء الفاتورة</button> : undefined}>
+      footer={<>
+        <AdminDelete table="purchases" id={p.id} label={`فاتورة المشتريات ${p.number}`} onDone={onClose} />
+        {cur.status === 'posted' && can('purchases', 'cancel') && <button className="btn-danger" disabled={busy} onClick={cancel}><Ban size={17} /> إلغاء الفاتورة</button>}
+      </>}>
       {cur.cancel_reason && <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200 mb-4">سبب الإلغاء: {cur.cancel_reason}</div>}
       <div className="grid grid-cols-4 gap-3 mb-4">
         {[['البضاعة', usd(cur.goods_usd)], ['سعر الصرف', num(cur.rate, 2)], ['الشحن', sdg(cur.shipping_sdg)], ['الجمارك + رسوم', sdg(Number(cur.customs_sdg) + Number(cur.other_sdg))]].map(([a, b]) => (

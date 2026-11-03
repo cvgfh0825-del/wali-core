@@ -3,6 +3,7 @@ import { Factory, Plus, Pencil } from 'lucide-react'
 import { useApp, useLoad, useAction } from '../lib/app'
 import { PageHeader, SearchBox, Money, Empty, Loading, Modal, Field, NoAccess } from '../components/ui'
 import type { Row } from '../lib/backend'
+import { AdminDelete } from '../components/AdminDelete'
 
 export default function Suppliers() {
   const { db, can } = useApp()
@@ -27,7 +28,7 @@ export default function Suppliers() {
                 <td className="font-semibold">{s.name}</td><td className="text-zinc-400">{s.country}</td><td className="num" dir="ltr">{s.phone}</td>
                 <td><Money v={s.total_purchases} /></td>
                 <td><Money v={s.balance} className={Number(s.balance) > 0 ? 'text-red-300 font-bold' : 'text-emerald-300'} /></td>
-                <td>{can('suppliers', 'edit') && <button className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-ink-700" onClick={() => setEdit(s)}><Pencil size={16} /></button>}</td>
+                <td className="whitespace-nowrap">{can('suppliers', 'edit') && <button className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-ink-700" onClick={() => setEdit(s)}><Pencil size={16} /></button>}<AdminDelete icon table="suppliers" id={s.id} label={`المورد ${s.name}`} /></td>
               </tr>
             ))}</tbody>
           </table>
